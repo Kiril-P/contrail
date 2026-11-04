@@ -17,8 +17,8 @@ struct SettingsView: View {
             GeneralSettings(store: store)
                 .tabItem { Label("General", systemImage: "gearshape") }
         }
-        .frame(width: 480)
-        .fixedSize(horizontal: false, vertical: true)
+        // A fixed size that fits 1280×800 screens; each tab's form scrolls.
+        .frame(width: 480, height: 600)
     }
 }
 
@@ -267,6 +267,10 @@ struct GeneralSettings: View {
                 Text("Contrail is free software, licensed under the GNU GPL v3.")
                     .foregroundStyle(.secondary)
                 Link("github.com/Kiril-P/contrail", destination: URL(string: "https://github.com/Kiril-P/contrail")!)
+                if let acknowledgements = Bundle.main.url(forResource: "Acknowledgements", withExtension: "txt") {
+                    Button("Acknowledgements") { NSWorkspace.shared.open(acknowledgements) }
+                        .buttonStyle(.link)
+                }
             }
         }
         .formStyle(.grouped)

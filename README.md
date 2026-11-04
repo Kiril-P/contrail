@@ -51,7 +51,7 @@ None of this needs any permission. The shortcut uses the system hot-key API, and
 
 ## Build from source
 
-You need Xcode 16 or later.
+You need Xcode 26 or later.
 
 ```sh
 git clone https://github.com/Kiril-P/contrail.git

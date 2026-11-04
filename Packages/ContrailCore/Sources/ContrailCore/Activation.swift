@@ -61,6 +61,45 @@ public struct FrontmostApp: Equatable, Sendable {
     }
 }
 
+/// The frontmost app and any temporary override, with the rules for when
+/// the override ends.
+public struct ActivationState: Sendable {
+    public private(set) var frontmost: FrontmostApp?
+    /// Set by the switch or shortcut while a rule applies.
+    public private(set) var override: Bool?
+
+    public init(frontmost: FrontmostApp? = nil) {
+        self.frontmost = frontmost
+    }
+
+    /// Call when another app becomes frontmost (never for Contrail itself).
+    /// The override only ends when the app actually changes: returning to
+    /// the same app from Contrail's popover or Settings keeps it.
+    public mutating func activated(_ app: FrontmostApp) {
+        if app.identity != frontmost?.identity {
+            override = nil
+        }
+        frontmost = app
+    }
+
+    /// The switch or shortcut. Returns true when the user's own on/off
+    /// setting should flip (no rule applies); otherwise sets an override.
+    public mutating func toggle(settings: TrailSettings) -> Bool {
+        guard ActivationPolicy.rule(for: frontmost, settings: settings) != nil else { return true }
+        override = !decide(settings: settings).isOn
+        return false
+    }
+
+    public func decide(settings: TrailSettings) -> ActivationPolicy.Decision {
+        ActivationPolicy.decide(settings: settings, frontmost: frontmost, override: override)
+    }
+}
+
+extension FrontmostApp {
+    /// What counts as "the same app" for ending an override.
+    var identity: String { bundleID ?? name }
+}
+
 /// Decides whether the trail is on.
 ///
 /// Precedence, highest first:

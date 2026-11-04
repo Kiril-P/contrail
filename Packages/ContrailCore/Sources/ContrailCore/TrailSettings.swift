@@ -182,8 +182,21 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.style = (try? c.decodeIfPresent(TrailStyle.self, forKey: .style)) ?? d.style
         self.sparks = (try? c.decodeIfPresent(Double.self, forKey: .sparks)) ?? d.sparks
         self.holdModifier = (try? c.decodeIfPresent(HoldModifier.self, forKey: .holdModifier)) ?? d.holdModifier
-        self.appRules = (try? c.decodeIfPresent([AppRule].self, forKey: .appRules)) ?? d.appRules
+        // Rules decode one by one: a rule this version can't read (say, a
+        // mode added later) is skipped instead of dropping all of them.
+        self.appRules = (try? c.decodeIfPresent([Lossy<AppRule>].self, forKey: .appRules))?
+            .compactMap(\.value) ?? d.appRules
         self.offInGames = (try? c.decodeIfPresent(Bool.self, forKey: .offInGames)) ?? d.offInGames
+    }
+}
+
+/// Decodes a value, or nil if it can't be read, without failing the
+/// surrounding container.
+private struct Lossy<Value: Decodable>: Decodable {
+    let value: Value?
+
+    init(from decoder: Decoder) throws {
+        value = try? Value(from: decoder)
     }
 }
 

@@ -16,9 +16,7 @@ final class ActivationController: ObservableObject {
     @Published private(set) var decision: ActivationPolicy.Decision
 
     private let store: SettingsStore
-    private var frontmost: FrontmostApp?
-    /// Set by the switch or shortcut while a rule applies; cleared on app switch.
-    private var override: Bool?
+    private var state = ActivationState()
     private var cancellables: Set<AnyCancellable> = []
     private var observer: NSObjectProtocol?
 
@@ -29,7 +27,7 @@ final class ActivationController: ObservableObject {
         self.decision = ActivationPolicy.decide(settings: store.settings, frontmost: nil, override: nil)
 
         if let app = NSWorkspace.shared.frontmostApplication, !Self.isSelf(app) {
-            frontmost = Self.describe(app)
+            state.activated(Self.describe(app))
         }
         recompute(settings: store.settings)
 
@@ -54,24 +52,22 @@ final class ActivationController: ObservableObject {
     /// user's own setting.
     func toggle() {
         let settings = store.settings
-        if ActivationPolicy.rule(for: frontmost, settings: settings) != nil {
-            override = !decision.isOn
-            recompute(settings: settings)
-        } else {
+        if state.toggle(settings: settings) {
             store.settings.isEnabled.toggle()
+        } else {
+            recompute(settings: settings)
         }
     }
 
     private func activated(_ app: NSRunningApplication?) {
         // Opening Contrail's own popover or Settings shouldn't change anything.
         guard let app, !Self.isSelf(app) else { return }
-        frontmost = Self.describe(app)
-        override = nil
+        state.activated(Self.describe(app))
         recompute(settings: store.settings)
     }
 
     private func recompute(settings: TrailSettings) {
-        let next = ActivationPolicy.decide(settings: settings, frontmost: frontmost, override: override)
+        let next = state.decide(settings: settings)
         if next != decision {
             decision = next
         }

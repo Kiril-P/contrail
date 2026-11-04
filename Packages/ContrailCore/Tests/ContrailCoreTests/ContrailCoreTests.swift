@@ -413,6 +413,35 @@ import Testing
         #expect(ActivationPolicy.decide(settings: s, frontmost: editor, override: false).isOn)
     }
 
+    @Test func overrideSurvivesAVisitToContrail() {
+        let rules = [AppRule(bundleID: keynote.bundleID!, name: "Keynote", mode: .always)]
+        let s = settings(enabled: true, rules: rules)
+        var state = ActivationState()
+        state.activated(keynote)
+        #expect(state.toggle(settings: s) == false)
+        #expect(!state.decide(settings: s).isOn)
+        // Contrail itself is never reported; coming back to Keynote keeps it.
+        state.activated(keynote)
+        #expect(!state.decide(settings: s).isOn)
+        // A different app ends the override.
+        state.activated(editor)
+        state.activated(keynote)
+        #expect(state.decide(settings: s).isOn)
+    }
+
+    @Test func toggleWithoutARuleFlipsTheManualSetting() {
+        var state = ActivationState()
+        state.activated(editor)
+        #expect(state.toggle(settings: settings(enabled: true)) == true)
+        #expect(state.override == nil)
+    }
+
+    @Test func unreadableRulesAreSkippedNotAllDropped() throws {
+        let json = #"{"appRules": [{"bundleID": "a", "name": "A", "mode": "sometimes"}, {"bundleID": "b", "name": "B", "mode": "never"}]}"#
+        let s = try JSONDecoder().decode(TrailSettings.self, from: json.data(using: .utf8)!)
+        #expect(s.appRules == [AppRule(bundleID: "b", name: "B", mode: .never)])
+    }
+
     @Test func gameCategories() {
         #expect(FrontmostApp.isGameCategory("public.app-category.games"))
         #expect(FrontmostApp.isGameCategory("public.app-category.action-games"))

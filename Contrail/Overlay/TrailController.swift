@@ -203,7 +203,11 @@ final class TrailController {
                 engine.update(cursor: cursor, now: now, settings: settings)
             }
             let points = engine.visiblePoints(length: settings.length)
-            particles.update(head: engine.samples.last?.point, dt: dt, settings: settings)
+            // No head while the hold key is up or on a stroke's first sample,
+            // so particles never stream across movement the trail didn't draw.
+            let head = engine.samples.last
+            let particleHead = holding && head?.startsStroke == false ? head?.point : nil
+            particles.update(head: particleHead, dt: dt, settings: settings)
             ripples.prune(now: now)
             frameContent = TrailFrame(
                 segments: TrailGeometry.segments(for: points, settings: settings),
