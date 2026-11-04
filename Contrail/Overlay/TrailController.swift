@@ -134,6 +134,15 @@ final class TrailController {
         }) {
             monitors.append(global)
         }
+        // Presses inside Contrail's own windows (popover, Settings) never
+        // count as drags, and clear any press state left from outside.
+        let ownClicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        if let local = NSEvent.addLocalMonitorForEvents(matching: ownClicks, handler: { [weak self] event in
+            MainActor.assumeIsolated { self?.clearPress() }
+            return event
+        }) {
+            monitors.append(local)
+        }
         if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] event in
             let flags = event.modifierFlags
             MainActor.assumeIsolated { self?.moved(flags: flags) }
@@ -147,7 +156,12 @@ final class TrailController {
         if let global = NSEvent.addGlobalMonitorForEvents(matching: clicks, handler: { [weak self] event in
             let flags = event.modifierFlags
             let pressLocation = event.locationInWindow
-            MainActor.assumeIsolated { self?.pressed(at: pressLocation) }
+            // Another button already down means this press joins a drag in
+            // progress rather than starting a new one.
+            let otherButtons = NSEvent.pressedMouseButtons & ~(1 << event.buttonNumber)
+            MainActor.assumeIsolated {
+                if otherButtons == 0 { self?.pressed(at: pressLocation) }
+            }
             let primary = event.type == .leftMouseDown && !flags.contains(.control)
             // For global events there's no window, so this is already in
             // screen coordinates: where the click happened, even if the
@@ -169,6 +183,11 @@ final class TrailController {
 
     private func pressed(at location: CGPoint) {
         pressPoint = location
+        pressIsDrag = false
+    }
+
+    private func clearPress() {
+        pressPoint = nil
         pressIsDrag = false
     }
 

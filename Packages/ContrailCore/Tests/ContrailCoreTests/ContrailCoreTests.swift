@@ -528,7 +528,31 @@ import Testing
 
     @Test func dragWidthIsCapped() {
         let s = TrailSettings(width: 20, taper: 0, followSpeed: 1)
-        #expect(dragged(s, draggingFrom: 0).allSatisfy { $0.r0 <= Float(TrailSettings.dragMaxWidth / 2) })
+        #expect(dragged(s, draggingFrom: 0).allSatisfy { $0.r0 <= Float(TrailSettings.dragMaxWidth / 2) + 0.001 })
+        // A ribbon this wide is already past the cap, so dragging doesn't
+        // widen it at all (it still changes color).
+        var ribbon = s
+        ribbon.style = .ribbon
+        let plain = dragged(ribbon, draggingFrom: 1000).map(\.r0)
+        let drag = dragged(ribbon, draggingFrom: 0).map(\.r0)
+        #expect(plain == drag)
+    }
+
+    @Test func cometHeadWidensWhenDragging() {
+        var s = TrailSettings(width: 8, followSpeed: 1)
+        s.style = .comet
+        let still = dragged(s, draggingFrom: 1000).last!.r0
+        let drag = dragged(s, draggingFrom: 0).last!.r0
+        #expect(drag > still)
+        #expect(drag <= Float(TrailSettings.dragMaxWidth / 2) + 0.001)
+    }
+
+    @Test func dragColorFadesInAlongTheTrail() {
+        let s = TrailSettings(width: 8, taper: 0, followSpeed: 1)
+        let weights = dragged(s, draggingFrom: 20).map(\.d0)
+        // Somewhere between plain and dragged there are in-between weights.
+        #expect(weights.contains { $0 > 0.05 && $0 < 0.95 })
+        #expect(weights.first == 0 && weights.last == 1)
     }
 
     @Test func automaticDragColorContrastsWithTheTrail() {
