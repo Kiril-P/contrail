@@ -239,6 +239,26 @@ import Testing
         #expect(segments.count > 5)
     }
 
+    @Test func dotsDontMoveWhenTheTrailTurns() {
+        var settings = TrailSettings(width: 8)
+        settings.style = .dotted
+        let straight = [
+            TrailPoint(point: CGPoint(x: 0, y: 0), age: 0.5, startsStroke: true, distance: 0),
+            TrailPoint(point: CGPoint(x: 100, y: 0), age: 0, startsStroke: false, distance: 100),
+        ]
+        let turned = [
+            TrailPoint(point: CGPoint(x: 0, y: 0), age: 0.6, startsStroke: true, distance: 0),
+            TrailPoint(point: CGPoint(x: 100, y: 0), age: 0.3, startsStroke: false, distance: 100),
+            TrailPoint(point: CGPoint(x: 100, y: 100), age: 0, startsStroke: false, distance: 200),
+        ]
+        let before = TrailGeometry.segments(for: straight, settings: settings).dropLast().map(\.p0)
+        let after = TrailGeometry.segments(for: turned, settings: settings).map(\.p0)
+        // Every dot laid along the first leg is still exactly where it was.
+        for dot in before {
+            #expect(after.contains(dot))
+        }
+    }
+
     @Test func ribbonTwistsAlongTheStroke() {
         var settings = TrailSettings(width: 10, taper: 0)
         settings.style = .ribbon
@@ -323,6 +343,31 @@ import Testing
 
     @Test func layoutMatchesShader() {
         #expect(MemoryLayout<ParticleInstance>.stride == 32)
+    }
+
+    /// The head only moves on some frames when the display outpaces the
+    /// mouse; emission must still follow distance travelled.
+    @Test func emissionFollowsDistanceWhenTheHeadStutters() {
+        var system = ParticleSystem(seed: 5)
+        let s = settings(.sparks, sparks: 0.45)
+        var x = 0.0
+        system.update(head: .zero, dt: 1 / 120, settings: s)
+        for frame in 0..<36 {
+            if frame % 2 == 0 { x += 1 }   // 1 pt every other frame: 60 pt/s
+            system.update(head: CGPoint(x: x, y: 0), dt: 1 / 120, settings: s)
+        }
+        let expected = x * 0.45 * 1.2
+        #expect(Double(system.count) >= expected.rounded(.down) - 1)
+    }
+
+    @Test func highContrastHidesParticlesAlreadyInFlight() {
+        var system = ParticleSystem(seed: 6)
+        var s = settings(.sparks)
+        system.update(head: .zero, dt: 1 / 120, settings: s)
+        system.update(head: CGPoint(x: 80, y: 0), dt: 1 / 120, settings: s)
+        #expect(!system.instances(settings: s).isEmpty)
+        s.highContrast = true
+        #expect(system.instances(settings: s).isEmpty)
     }
 }
 

@@ -99,7 +99,11 @@ public struct ParticleSystem: Sendable {
 
         let move = SIMD2(Double(head.x - previous.x), Double(head.y - previous.y))
         let distance = (move * move).sum().squareRoot()
-        guard distance > 0.01, distance < Self.teleportDistance else {
+        // Frames where the head didn't move keep the fractional debt: the
+        // display often refreshes faster than the mouse reports, and
+        // dropping it would starve slow movement of particles.
+        guard distance > 0.01 else { return }
+        guard distance < Self.teleportDistance else {
             debt = 0
             return
         }
@@ -151,6 +155,9 @@ public struct ParticleSystem: Sendable {
     }
 
     public func instances(settings: TrailSettings) -> [ParticleInstance] {
+        // Glowing specks look muddy on light backgrounds, so high contrast
+        // hides them at once, including ones already in flight.
+        guard !settings.highContrast else { return [] }
         let preset = settings.preset
         return particles.map { particle in
             let t = particle.age / particle.life
