@@ -53,6 +53,25 @@ final class TrailLayerView: NSView {
         let uniforms = TrailUniforms(viewSize: bounds.size, origin: origin, scale: scale, settings: settings)
         if renderer.draw(segments, uniforms: uniforms, into: metalLayer) {
             isClear = segments.isEmpty
+            if metalLayer.isHidden {
+                setLayerHidden(false)
+            }
         }
+    }
+
+    /// Hides whatever this view last presented without asking the GPU for a
+    /// drawable, which can block for up to a second on a display that isn't
+    /// presenting (standby, mirroring). The next successful draw shows it again.
+    func hideStaleContent() {
+        guard !isClear else { return }
+        setLayerHidden(true)
+        isClear = true
+    }
+
+    private func setLayerHidden(_ hidden: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        metalLayer.isHidden = hidden
+        CATransaction.commit()
     }
 }

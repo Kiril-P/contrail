@@ -33,7 +33,9 @@ enum SnapshotRenderer {
         if let glow = number("--glow") { settings.glow = glow }
         let background = args.firstIndex(of: "--background").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
             ?? (settings.highContrast ? "light" : "dark")
-        let ok = render(settings: settings.clamped(), background: background, to: output)
+        if let taper = number("--taper") { settings.taper = taper }
+        let speed = number("--speed")
+        let ok = render(settings: settings.clamped(), background: background, speed: speed, to: output)
         exit(ok ? 0 : 1)
     }
 
@@ -77,6 +79,23 @@ enum SnapshotRenderer {
         return (try? data.write(to: url)) != nil
     }
 
+    /// A slow, steady drag at `speed` points per second, sampled at 120 Hz with
+    /// a 60 Hz mouse, through the real engine and settings. Slow motion makes
+    /// very short segments, which the fast flick never exercises.
+    static func slowTrail(size: CGSize, settings: TrailSettings, speed: Double) -> [TrailSegment] {
+        var engine = TrailEngine()
+        let frames = 360
+        var position = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
+        for frame in 0..<frames {
+            if frame % 2 == 0 {
+                position.x += speed / 60
+                position.y += speed / 60 * 0.3
+            }
+            engine.update(cursor: position, now: Double(frame) / 120, settings: settings)
+        }
+        return TrailGeometry.segments(for: engine.visiblePoints(length: settings.length), settings: settings)
+    }
+
     /// A smooth S-curve sampled the way the engine would see a fast mouse flick.
     static func sampleTrail(size: CGSize, settings: TrailSettings) -> [TrailSegment] {
         var engine = TrailEngine()
@@ -92,8 +111,8 @@ enum SnapshotRenderer {
         return TrailGeometry.segments(for: engine.visiblePoints(length: flick.length), settings: settings)
     }
 
-    static func render(settings: TrailSettings, background: String, to url: URL) -> Bool {
-        guard let image = renderImage(settings: settings, background: background, size: CGSize(width: 640, height: 300)) else { return false }
+    static func render(settings: TrailSettings, background: String, speed: Double? = nil, to url: URL) -> Bool {
+        guard let image = renderImage(settings: settings, background: background, size: CGSize(width: 640, height: 300), speed: speed) else { return false }
         return write(image, to: url)
     }
 
@@ -130,10 +149,11 @@ enum SnapshotRenderer {
 
     /// Renders the sample trail at 2×. `background` is "light", "dark", or nil
     /// for a transparent image.
-    static func renderImage(settings: TrailSettings, background: String?, size: CGSize) -> CGImage? {
+    static func renderImage(settings: TrailSettings, background: String?, size: CGSize, speed: Double? = nil) -> CGImage? {
         guard let renderer = TrailRenderer.shared else { return nil }
         let scale: CGFloat = 2
-        let segments = sampleTrail(size: size, settings: settings)
+        let segments = speed.map { slowTrail(size: size, settings: settings, speed: $0) }
+            ?? sampleTrail(size: size, settings: settings)
         let uniforms = TrailUniforms(viewSize: size, origin: .zero, scale: scale, settings: settings)
         guard let texture = renderer.renderOffscreen(
             segments, uniforms: uniforms, width: Int(size.width * scale), height: Int(size.height * scale)

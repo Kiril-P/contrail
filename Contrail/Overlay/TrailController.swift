@@ -27,10 +27,8 @@ final class TrailController {
     private var segments: [TrailSegment] = []
     private var lastUpdate: CFTimeInterval = 0
     private var isActive = false
-    /// When the trail last became empty, and whether screens that haven't
-    /// cleared themselves have been given their one cross-screen clear.
+    /// When the trail last became empty.
     private var emptySince: CFTimeInterval?
-    private var clearedOthers = false
 
     init(store: SettingsStore) {
         self.store = store
@@ -129,7 +127,6 @@ final class TrailController {
         guard enabled ?? store.settings.isEnabled, !isActive else { return }
         isActive = true
         emptySince = nil
-        clearedOthers = false
         for overlay in overlays { overlay.driver.start() }
     }
 
@@ -163,26 +160,21 @@ final class TrailController {
 
         guard engine.isEmpty else {
             emptySince = nil
-            clearedOthers = false
             return
         }
         let emptyFor = now - (emptySince ?? now)
         if emptySince == nil { emptySince = now }
 
-        // Screens normally clear themselves on their next tick. A screen whose
-        // display link stopped (standby, mirroring) gets one clear from here;
-        // a single attempt only, because nextDrawable() can block for up to a
-        // second on a display that isn't presenting.
-        if emptyFor > 0.1 && !clearedOthers {
-            clearedOthers = true
+        // Screens normally clear themselves on their next tick. If one hasn't
+        // after 0.1 s, its display link has probably stopped (standby,
+        // mirroring): hide its stale content instead of drawing, so nothing
+        // here can block on the GPU, and let it redraw on the next wake.
+        if emptyFor > 0.1 {
             for other in overlays where !other.view.isClear {
-                other.view.render([], origin: other.panel.frame.origin, settings: settings)
+                other.view.hideStaleContent()
             }
         }
-        // Sleep once everything is clear, or after a short timeout so a screen
-        // that can't draw never keeps the others awake. A screen left dirty is
-        // cleared by its own link on the next wake.
-        if overlays.allSatisfy(\.view.isClear) || emptyFor > 0.5 {
+        if overlays.allSatisfy(\.view.isClear) {
             sleep()
             engine.reset()
         }
