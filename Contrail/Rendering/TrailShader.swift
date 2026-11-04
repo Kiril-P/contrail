@@ -118,19 +118,23 @@ enum TrailShader {
         return pow(clamp(lin * (target / y), 0.0, 1.0), 1.0 / 2.2);
     }
 
-    // Distance from p to the segment, and the position h (0...1) along it.
+    // Distance from p to the segment, and the unclamped position along it
+    // (0 at a, 1 at b, beyond either end outside the segment).
     static float2 segmentDistance(float2 p, float2 a, float2 b) {
         float2 pa = p - a;
         float2 ba = b - a;
-        float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
-        return float2(length(pa - ba * h), h);
+        float t = dot(pa, ba) / max(dot(ba, ba), 1e-6);
+        return float2(length(pa - ba * clamp(t, 0.0, 1.0)), t);
     }
 
     fragment float4 trail_fragment(VertexOut in [[stage_in]],
                                    constant Uniforms& u [[buffer(1)]]) {
         float2 dh = segmentDistance(in.world, in.p0, in.p1);
         float d = dh.x;
-        float r = mix(in.ru.x, in.ru.y, dh.y);
+        // Radius and age are extrapolated past the segment's ends, so each
+        // round cap continues its neighbour's falloff instead of holding its
+        // endpoint value (which would show as beads at the joints).
+        float r = max(mix(in.ru.x, in.ru.y, dh.y), 0.05);
         float age = clamp(mix(in.ru.z, in.ru.w, dh.y), 0.0, 1.0);
         float aa = u.pixel;
         float3 base = gradientColor(age, u);

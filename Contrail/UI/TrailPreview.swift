@@ -42,11 +42,6 @@ final class PreviewTrailView: NSView {
         super.init(frame: .zero)
         trailView.autoresizingMask = [.width, .height]
         addSubview(trailView)
-        reduceMotionObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateRunning() }
-        }
     }
 
     @available(*, unavailable)
@@ -63,6 +58,10 @@ final class PreviewTrailView: NSView {
             NotificationCenter.default.removeObserver(occlusionObserver)
             self.occlusionObserver = nil
         }
+        if let reduceMotionObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(reduceMotionObserver)
+            self.reduceMotionObserver = nil
+        }
         guard let window else {
             driver?.invalidate()
             driver = nil
@@ -70,6 +69,11 @@ final class PreviewTrailView: NSView {
         }
         if driver == nil {
             driver = FrameDriver(view: trailView) { [weak self] in self?.step() }
+        }
+        reduceMotionObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateRunning() }
         }
         occlusionObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main

@@ -4,7 +4,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var store: SettingsStore
-    @State private var launchAtLogin = LaunchAtLogin.isEnabled
+    @State private var launchAtLogin = LaunchAtLogin.isEnabled || LaunchAtLogin.needsApproval
     @State private var launchNeedsApproval = LaunchAtLogin.needsApproval
     @State private var launchError: String?
 
@@ -85,8 +85,10 @@ struct SettingsView: View {
     /// The login item can change in System Settings while this window is
     /// hidden, so re-read it whenever the window or app comes back.
     private func refreshLoginItem() {
-        launchAtLogin = LaunchAtLogin.isEnabled
         launchNeedsApproval = LaunchAtLogin.needsApproval
+        // Registered but awaiting approval still counts as on, so switching it
+        // off unregisters Contrail and dismisses the note.
+        launchAtLogin = LaunchAtLogin.isEnabled || launchNeedsApproval
     }
 
     private func followLabel(_ value: Double) -> String {
