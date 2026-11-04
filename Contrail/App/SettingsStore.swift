@@ -37,6 +37,7 @@ final class SettingsStore: ObservableObject {
     /// (shortcut, hold key, per-app rules) are kept.
     func resetAppearance() {
         var fresh = TrailSettings.default
+        Look.look(id: Look.defaultID)?.apply(to: &fresh, size: .medium)
         fresh.isEnabled = settings.isEnabled
         fresh.holdModifier = settings.holdModifier
         fresh.appRules = settings.appRules
