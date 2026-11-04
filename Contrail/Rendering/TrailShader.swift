@@ -30,10 +30,14 @@ enum TrailShader {
         float pixel;          // size of one device pixel in points
         float highContrast;   // 0 or 1
         float stopCount;
-        float pad0;
+        float style;          // 0 neon, 1 comet, 2 ribbon, 3 dotted, 4 sparks
         float pad1;
         float4 stops[4];
     };
+
+    constant int kStyleComet = 1;
+    constant int kStyleRibbon = 2;
+    constant int kStyleDotted = 3;
 
     struct VertexOut {
         float4 position [[position]];
@@ -156,32 +160,94 @@ enum TrailShader {
 
         // Glow: a saturated tube whose inner 40% runs white-hot near the head,
         // inside a tight halo plus a wide, faint one.
-        float fade = 1.0 - pow(age, 2.2);
+        int style = int(u.style + 0.5);
+        float fade = style == kStyleComet ? 1.0 - pow(age, 0.6) : 1.0 - pow(age, 2.2);
+        float glowStrength = u.glow * (style == kStyleRibbon ? 0.5 : (style == kStyleDotted ? 0.6 : 1.0));
         float core = 1.0 - smoothstep(r - aa, r + aa, d);
         // Keep the hot band at least ~1.5 px wide so it never breaks into dots
         // where the tail gets thin, and let the tail end in pure color.
         float hotInner = 0.3 * r;
         float hotOuter = max(0.7 * r, hotInner + 1.5 * aa);
         float hot = 0.85 * (1.0 - smoothstep(hotInner, hotOuter, d)) * pow(1.0 - age, 1.5);
+        if (style == kStyleComet) { hot = min(hot * 1.15, 0.95); }
         float3 coreColor = mix(base, float3(1.0), hot);
 
         float scale = glowScale(r, u);
         float outside = max(d - r, 0.0);
         float tightSigma = max(kTightSigma * u.width * scale, 0.5);
         float wideSigma = max(kWideSigma * u.width * scale, 1.0);
-        float halo = 1.1 * u.glow * exp(-pow(outside / tightSigma, 2.0))
-                   + 0.45 * u.glow * exp(-pow(outside / wideSigma, 2.0));
+        float halo = 1.1 * glowStrength * exp(-pow(outside / tightSigma, 2.0))
+                   + 0.45 * glowStrength * exp(-pow(outside / wideSigma, 2.0));
         // The halo fades more slowly than the core so the tail keeps a glow.
         // The core is never dimmer than the halo right at its edge; otherwise
         // overlapping capsules would show bright beads at every joint.
         float haloFade = pow(max(fade, 0.0), 0.6);
-        float edgeHalo = min(1.55 * u.glow, 1.0) * haloFade;
+        float edgeHalo = min(1.55 * glowStrength, 1.0) * haloFade;
         float haloAlpha = (1.0 - core) * min(halo, 1.0) * haloFade;
         float coreAlpha = core * max(fade, edgeHalo);
+
+        if (style == kStyleRibbon) {
+            // A flat translucent band with bright edges. The edge is measured
+            // from the segment's line, not the capsule, so joints don't light
+            // up as arcs.
+            float2 ba = in.p1 - in.p0;
+            float len = length(ba);
+            // Zero-length capsules (dots, the head) have no line, so no edge.
+            float lineDistance = len > 1e-3 ? abs(dot(in.world - in.p0, float2(-ba.y, ba.x) / len)) : d;
+            float edge = len > 1e-3 ? 1.0 - smoothstep(0.0, 1.0 + aa, abs(r - lineDistance)) : 0.0;
+            float body = 0.55 + 0.45 * edge;
+            coreAlpha = core * max(fade * body, edgeHalo);
+            coreColor = mix(base, float3(1.0), 0.4 * edge * (1.0 - age));
+        }
 
         // Premultiplied output; Opacity scales everything uniformly.
         float3 color = coreColor * coreAlpha + base * haloAlpha;
         return float4(color, coreAlpha + haloAlpha) * u.opacity;
+    }
+
+    // MARK: Particles
+
+    struct Particle {
+        float2 center;
+        float sigma;
+        float alpha;
+        float4 color;
+    };
+
+    struct ParticleOut {
+        float4 position [[position]];
+        float2 world;
+        float2 center [[flat]];
+        float2 sigmaAlpha [[flat]];
+        float4 color [[flat]];
+    };
+
+    vertex ParticleOut particle_vertex(uint vid [[vertex_id]],
+                                       uint iid [[instance_id]],
+                                       const device Particle* particles [[buffer(0)]],
+                                       constant Uniforms& u [[buffer(1)]]) {
+        Particle p = particles[iid];
+        float extent = 7.5 * p.sigma + 1.0;
+        float2 corner = float2((vid & 1) ? 1.0 : -1.0, (vid & 2) ? 1.0 : -1.0);
+        float2 world = p.center + corner * extent;
+
+        ParticleOut out;
+        out.position = float4((world - u.origin) / u.viewSize * 2.0 - 1.0, 0.0, 1.0);
+        out.world = world;
+        out.center = p.center;
+        out.sigmaAlpha = float2(p.sigma, p.alpha);
+        out.color = p.color;
+        return out;
+    }
+
+    fragment float4 particle_fragment(ParticleOut in [[stage_in]]) {
+        float sigma = max(in.sigmaAlpha.x, 0.3);
+        float d = length(in.world - in.center);
+        // A bright point with a soft halo about three times its size.
+        float glow = max(exp(-pow(d / sigma, 2.0)), 0.35 * exp(-pow(d / (3.0 * sigma), 2.0)));
+        float hot = 0.8 * exp(-pow(d / (0.6 * sigma), 2.0));
+        float alpha = glow * in.sigmaAlpha.y;
+        return float4(mix(in.color.rgb, float3(1.0), hot) * alpha, alpha);
     }
 
     // MARK: Click ripples

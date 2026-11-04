@@ -199,6 +199,132 @@ import Testing
     }
 }
 
+@Suite struct StyleTests {
+    /// Drags right at 600 pt/s for `frames` frames at 120 Hz.
+    func drag(_ settings: TrailSettings, frames: Int = 60) -> TrailEngine {
+        var engine = TrailEngine()
+        for frame in 0..<frames {
+            engine.update(cursor: CGPoint(x: Double(frame) * 5, y: 0), now: Double(frame) / 120, settings: settings)
+        }
+        return engine
+    }
+
+    @Test func distanceIsAnchoredToTheStroke() {
+        let settings = TrailSettings(length: 0.2, followSpeed: 1)
+        let engine = drag(settings, frames: 120)
+        let points = engine.visiblePoints(length: settings.length)
+        // Distances keep counting from where the stroke began, not from the
+        // current tail, so they don't shift as the tail retracts.
+        #expect(points.first!.distance > 400)
+        for (a, b) in zip(points, points.dropFirst()) {
+            #expect(b.distance >= a.distance)
+            #expect(abs((b.distance - a.distance) - Double(b.point.x - a.point.x)) < 0.01)
+        }
+    }
+
+    @Test func dotsSitOnFixedMultiplesOfThePeriod() {
+        var settings = TrailSettings(width: 8, followSpeed: 1)
+        settings.style = .dotted
+        let engine = drag(settings)
+        let segments = TrailGeometry.segments(for: engine.visiblePoints(length: settings.length), settings: settings)
+        let period = Float(TrailGeometry.dotPeriod(settings: settings))
+        #expect(segments.allSatisfy { $0.p0 == $0.p1 })
+        // Every dot except the head lies on a multiple of the period
+        // (the path is the x axis starting at 0).
+        for dot in segments.dropLast() {
+            let k = (dot.p0.x / period).rounded()
+            #expect(abs(dot.p0.x - k * period) < 0.01)
+        }
+        #expect(segments.count > 5)
+    }
+
+    @Test func ribbonTwistsAlongTheStroke() {
+        var settings = TrailSettings(width: 10, taper: 0)
+        settings.style = .ribbon
+        let wide = TrailGeometry.radius(age: 0, distance: 0, settings: settings)
+        let pinched = TrailGeometry.radius(age: 0, distance: 60, settings: settings)
+        #expect(wide == 10)
+        #expect(pinched < 2)
+    }
+
+    @Test func cometHasABigHeadAndThinTail() {
+        var settings = TrailSettings(width: 10, followSpeed: 1)
+        settings.style = .comet
+        let engine = drag(settings)
+        let segments = TrailGeometry.segments(for: engine.visiblePoints(length: settings.length), settings: settings)
+        #expect(segments.last!.r0 == 7)
+        #expect(segments.dropLast().allSatisfy { $0.r0 <= 2.75 })
+    }
+
+    @Test func unknownStyleDecodesAsNeon() throws {
+        let json = #"{"style": "holographic"}"#.data(using: .utf8)!
+        #expect(try JSONDecoder().decode(TrailSettings.self, from: json).style == .neon)
+    }
+}
+
+@Suite struct ParticleTests {
+    func settings(_ style: TrailStyle, sparks: Double = 1) -> TrailSettings {
+        var s = TrailSettings()
+        s.style = style
+        s.sparks = sparks
+        return s
+    }
+
+    @Test func emitsOnlyWhileTheHeadMoves() {
+        var system = ParticleSystem(seed: 1)
+        let s = settings(.sparks)
+        system.update(head: CGPoint(x: 0, y: 0), dt: 1 / 120, settings: s)
+        system.update(head: CGPoint(x: 100, y: 0), dt: 1 / 120, settings: s)
+        let afterMove = system.count
+        #expect(afterMove > 0)
+        system.update(head: CGPoint(x: 100, y: 0), dt: 1 / 120, settings: s)
+        #expect(system.count == afterMove)
+    }
+
+    @Test func particlesDieOut() {
+        var system = ParticleSystem(seed: 2)
+        let s = settings(.comet)
+        system.update(head: CGPoint(x: 0, y: 0), dt: 1 / 120, settings: s)
+        system.update(head: CGPoint(x: 80, y: 0), dt: 1 / 120, settings: s)
+        #expect(!system.isEmpty)
+        for _ in 0..<200 {
+            system.update(head: CGPoint(x: 80, y: 0), dt: 1 / 60, settings: s)
+        }
+        #expect(system.isEmpty)
+    }
+
+    @Test func noParticlesAcrossTeleportsOrForOtherStyles() {
+        var system = ParticleSystem(seed: 3)
+        system.update(head: .zero, dt: 1 / 120, settings: settings(.sparks))
+        system.update(head: CGPoint(x: 3000, y: 0), dt: 1 / 120, settings: settings(.sparks))
+        #expect(system.isEmpty)
+
+        system.update(head: CGPoint(x: 3100, y: 0), dt: 1 / 120, settings: settings(.neon))
+        #expect(system.isEmpty)
+
+        var matte = settings(.sparks)
+        matte.highContrast = true
+        system.update(head: CGPoint(x: 3200, y: 0), dt: 1 / 120, settings: matte)
+        #expect(system.isEmpty)
+    }
+
+    @Test func countIsCapped() {
+        var system = ParticleSystem(seed: 4)
+        let s = settings(.comet)
+        var x = 0.0
+        system.update(head: .zero, dt: 1 / 120, settings: s)
+        for _ in 0..<400 {
+            x += 300
+            system.update(head: CGPoint(x: x, y: 0), dt: 1 / 120, settings: s)
+        }
+        #expect(system.count <= ParticleSystem.maxCount)
+    }
+
+    @Test func layoutMatchesShader() {
+        #expect(MemoryLayout<ParticleInstance>.stride == 32)
+    }
+}
+
 @Suite struct SettingsTests {
     @Test func decodesPartialJSONWithDefaults() throws {
         let json = #"{"width": 9, "presetID": "cyan"}"#.data(using: .utf8)!

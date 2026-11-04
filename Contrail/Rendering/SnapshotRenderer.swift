@@ -4,8 +4,9 @@ import SwiftUI
 
 /// Renders a synthetic trail to a PNG without touching the real cursor.
 ///
-///     Contrail.app/Contents/MacOS/Contrail --snapshot out.png [--preset cyan] [--matte] [--width 7] [--opacity 1] [--glow 0.7] [--taper N] [--speed N] [--ripples] [--click-size N] [--background light|dark]
+///     Contrail.app/Contents/MacOS/Contrail --snapshot out.png [--preset cyan] [--matte] [--width 7] [--opacity 1] [--glow 0.7] [--taper N] [--speed N] [--ripples] [--click-size N] [--style neon|comet|ribbon|dotted|sparks] [--sparks N] [--background light|dark]
 ///     Contrail.app/Contents/MacOS/Contrail --snapshot-presets out.png
+///     Contrail.app/Contents/MacOS/Contrail --snapshot-styles out.png
 ///     Contrail.app/Contents/MacOS/Contrail --snapshot-ui out.png
 ///
 /// Used to produce README images and to eyeball shader changes.
@@ -19,6 +20,9 @@ enum SnapshotRenderer {
         }
         if let index = args.firstIndex(of: "--snapshot-presets"), index + 1 < args.count {
             exit(renderPresetSheet(to: URL(fileURLWithPath: args[index + 1])) ? 0 : 1)
+        }
+        if let index = args.firstIndex(of: "--snapshot-styles"), index + 1 < args.count {
+            exit(renderStyleSheet(to: URL(fileURLWithPath: args[index + 1])) ? 0 : 1)
         }
         guard let index = args.firstIndex(of: "--snapshot"), index + 1 < args.count else { return }
         let output = URL(fileURLWithPath: args[index + 1])
@@ -35,6 +39,10 @@ enum SnapshotRenderer {
             ?? (settings.highContrast ? "light" : "dark")
         if let taper = number("--taper") { settings.taper = taper }
         if let size = number("--click-size") { settings.clickSize = size }
+        if let i = args.firstIndex(of: "--style"), i + 1 < args.count, let style = TrailStyle(rawValue: args[i + 1]) {
+            settings.style = style
+        }
+        if let amount = number("--sparks") { settings.sparks = amount }
         sampleRipples = args.contains("--ripples")
         let speed = number("--speed")
         let ok = render(settings: settings.clamped(), background: background, speed: speed, to: output)
@@ -100,9 +108,15 @@ enum SnapshotRenderer {
         return TrailGeometry.segments(for: engine.visiblePoints(length: settings.length), settings: settings)
     }
 
-    /// A smooth S-curve sampled the way the engine would see a fast mouse flick.
+    /// A smooth S-curve sampled the way the engine would see a fast mouse flick,
+    /// with particles simulated alongside for the Comet and Sparks styles.
     static func sampleTrail(size: CGSize, settings: TrailSettings) -> [TrailSegment] {
+        sampleFrame(size: size, settings: settings).segments
+    }
+
+    static func sampleFrame(size: CGSize, settings: TrailSettings) -> TrailFrame {
         var engine = TrailEngine()
+        var particles = ParticleSystem()
         var flick = settings
         flick.length = 0.6
         let frames = 54
@@ -111,8 +125,12 @@ enum SnapshotRenderer {
             let x = size.width * (0.12 + 0.76 * t)
             let y = size.height * (0.5 + 0.28 * sin(t * .pi * 2.2))
             engine.update(cursor: CGPoint(x: x, y: y), now: t * 0.6, settings: flick)
+            particles.update(head: engine.samples.last?.point, dt: 0.6 / Double(frames), settings: settings)
         }
-        return TrailGeometry.segments(for: engine.visiblePoints(length: flick.length), settings: settings)
+        return TrailFrame(
+            segments: TrailGeometry.segments(for: engine.visiblePoints(length: flick.length), settings: settings),
+            particles: particles.instances(settings: settings)
+        )
     }
 
     static func render(settings: TrailSettings, background: String, speed: Double? = nil, to url: URL) -> Bool {
@@ -143,6 +161,26 @@ enum SnapshotRenderer {
         return write(image, to: url)
     }
 
+    /// The five styles stacked top to bottom in `TrailStyle.allCases` order.
+    static func renderStyleSheet(to url: URL) -> Bool {
+        let cell = CGSize(width: 560, height: 120)
+        let styles = TrailStyle.allCases
+        let width = Int(cell.width) * 2
+        let height = Int(cell.height) * styles.count * 2
+        guard let canvas = makeContext(width: width, height: height) else { return false }
+        canvas.setFillColor(darkBackground)
+        canvas.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        for (index, style) in styles.enumerated() {
+            var settings = TrailSettings.default
+            settings.style = style
+            guard let image = renderImage(settings: settings, background: nil, size: cell) else { return false }
+            let row = styles.count - 1 - index
+            canvas.draw(image, in: CGRect(x: 0, y: row * image.height, width: image.width, height: image.height))
+        }
+        guard let image = canvas.makeImage() else { return false }
+        return write(image, to: url)
+    }
+
     private static let darkBackground = CGColor(red: 0.07, green: 0.07, blue: 0.09, alpha: 1)
 
     private static func makeContext(width: Int, height: Int) -> CGContext? {
@@ -159,9 +197,8 @@ enum SnapshotRenderer {
     static func renderImage(settings: TrailSettings, background: String?, size: CGSize, speed: Double? = nil) -> CGImage? {
         guard let renderer = TrailRenderer.shared else { return nil }
         let scale: CGFloat = 2
-        let segments = speed.map { slowTrail(size: size, settings: settings, speed: $0) }
-            ?? sampleTrail(size: size, settings: settings)
-        var frame = TrailFrame(segments: segments)
+        var frame = speed.map { TrailFrame(segments: slowTrail(size: size, settings: settings, speed: $0)) }
+            ?? sampleFrame(size: size, settings: settings)
         if sampleRipples {
             var system = RippleSystem()
             let now = 10.0

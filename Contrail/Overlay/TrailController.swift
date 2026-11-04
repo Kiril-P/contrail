@@ -20,6 +20,7 @@ final class TrailController {
     private let store: SettingsStore
     private var engine = TrailEngine()
     private var ripples = RippleSystem()
+    private var particles = ParticleSystem()
     private var overlays: [ScreenOverlay] = []
     private var monitors: [Any] = []
     private var observers: [NSObjectProtocol] = []
@@ -69,6 +70,7 @@ final class TrailController {
             sleep()
             engine.reset()
             ripples.removeAll()
+            particles.removeAll()
             frameContent = .empty
             for overlay in overlays {
                 // Hide rather than draw a clear frame: drawing can block on a
@@ -164,9 +166,11 @@ final class TrailController {
         // Several displays tick independently; update the model at most once
         // per ~1 ms and let every display draw the latest state.
         if now - lastUpdate > 0.001 {
+            let dt = now - lastUpdate
             lastUpdate = now
             engine.update(cursor: NSEvent.mouseLocation, now: now, settings: settings)
             let points = engine.visiblePoints(length: settings.length)
+            particles.update(head: engine.samples.last?.point, dt: dt, settings: settings)
             ripples.prune(now: now)
             frameContent = TrailFrame(
                 segments: TrailGeometry.segments(for: points, settings: settings),
@@ -174,7 +178,8 @@ final class TrailController {
                     now: now,
                     size: settings.clickSize,
                     reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-                )
+                ),
+                particles: particles.instances(settings: settings)
             )
         }
 
@@ -186,11 +191,12 @@ final class TrailController {
         let rippleRect = frame.insetBy(dx: -48, dy: -48)
         let onScreen = TrailFrame(
             segments: frameContent.segments.filter { $0.bounds.intersects(trailRect) },
-            ripples: frameContent.ripples.filter { $0.bounds.intersects(rippleRect) }
+            ripples: frameContent.ripples.filter { $0.bounds.intersects(rippleRect) },
+            particles: frameContent.particles.filter { $0.bounds.intersects(frame) }
         )
         view.render(onScreen, origin: frame.origin, settings: settings)
 
-        guard engine.isEmpty && ripples.isEmpty else {
+        guard engine.isEmpty && ripples.isEmpty && particles.isEmpty else {
             emptySince = nil
             return
         }

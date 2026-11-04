@@ -58,56 +58,76 @@ public enum TrailGeometry {
         return segments
     }
 
-    /// Half width of the trail core at a given age. The body stays full for
-    /// most of its length and narrows to a hairline at the very end.
-    public static func radius(age: Double, settings: TrailSettings) -> Float {
+    /// Half width of the trail at a given age (and, for Ribbon, position
+    /// along the stroke). The body stays full for most of its length and
+    /// narrows to a hairline at the very end.
+    public static func radius(age: Double, distance: Double = 0, settings: TrailSettings) -> Float {
         let taper = min(max(settings.taper, 0), 1)
         let exponent = 1.3 * taper
         let remaining = 1 - min(max(age, 0), 1)
         let factor = exponent > 0 ? max(0.05, pow(remaining, exponent)) : 1
-        return Float(max(settings.width * 0.5 * factor, 0.1))
+        let width = settings.width
+        switch settings.style {
+        case .neon, .sparks, .dotted:
+            return Float(max(width * 0.5 * factor, 0.1))
+        case .ribbon:
+            // Twice as wide as the tube, pinched where the band "turns".
+            let twist = max(0.12, abs(cos(Double.pi * distance / (12 * width))))
+            return Float(max(width * factor * twist, 0.1))
+        case .comet:
+            // A thin tail that thins out fast behind a big head.
+            return Float(max(width * 0.275 * pow(remaining, 1.5), 0.1))
+        }
+    }
+
+    /// Spacing between dots in the Dotted style, in points.
+    public static func dotPeriod(settings: TrailSettings) -> Double {
+        max(2.5 * settings.width, 8)
+    }
+
+    private struct PathPoint {
+        var point: CGPoint
+        var age: Double
+        var distance: Double
     }
 
     private static func appendStroke(_ stroke: ArraySlice<TrailPoint>, settings: TrailSettings, into segments: inout [TrailSegment]) {
         let pts = Array(stroke)
-        guard let first = pts.first else { return }
+        guard let first = pts.first, let head = pts.last else { return }
 
-        if pts.count == 1 {
-            // A single sample renders as a dot.
-            let p = SIMD2<Float>(Float(first.point.x), Float(first.point.y))
-            let r = radius(age: first.age, settings: settings)
-            let u = Float(first.age)
-            segments.append(TrailSegment(p0: p, p1: p, r0: r, r1: r, u0: u, u1: u))
-            return
+        // Smooth the stroke into closely spaced points.
+        var path = [PathPoint(point: first.point, age: first.age, distance: first.distance)]
+        if pts.count > 1 {
+            for i in 0..<(pts.count - 1) {
+                let p1 = pts[i].point
+                let p2 = pts[i + 1].point
+                let p0 = i > 0 ? pts[i - 1].point : reflect(p2, about: p1)
+                let p3 = i + 2 < pts.count ? pts[i + 2].point : reflect(p1, about: p2)
+                let length = hypot(p2.x - p1.x, p2.y - p1.y)
+                let steps = min(max(Int((length / spacing).rounded(.up)), 1), maxSubdivisions)
+                for step in 1...steps {
+                    let t = CGFloat(step) / CGFloat(steps)
+                    path.append(PathPoint(
+                        point: step == steps ? p2 : catmullRom(p0, p1, p2, p3, t: t),
+                        age: pts[i].age + (pts[i + 1].age - pts[i].age) * Double(t),
+                        distance: pts[i].distance + (pts[i + 1].distance - pts[i].distance) * Double(t)
+                    ))
+                }
+            }
         }
 
-        for i in 0..<(pts.count - 1) {
-            let p1 = pts[i].point
-            let p2 = pts[i + 1].point
-            let p0 = i > 0 ? pts[i - 1].point : reflect(p2, about: p1)
-            let p3 = i + 2 < pts.count ? pts[i + 2].point : reflect(p1, about: p2)
-            let a1 = pts[i].age
-            let a2 = pts[i + 1].age
-
-            let distance = hypot(p2.x - p1.x, p2.y - p1.y)
-            let steps = min(max(Int((distance / spacing).rounded(.up)), 1), maxSubdivisions)
-
-            var previous = p1
-            var previousAge = a1
-            for step in 1...steps {
-                let t = CGFloat(step) / CGFloat(steps)
-                let point = step == steps ? p2 : catmullRom(p0, p1, p2, p3, t: t)
-                let age = a1 + (a2 - a1) * Double(t)
+        if settings.style == .dotted {
+            appendDots(along: path, settings: settings, into: &segments)
+        } else {
+            for (a, b) in zip(path, path.dropFirst()) {
                 segments.append(TrailSegment(
-                    p0: SIMD2(Float(previous.x), Float(previous.y)),
-                    p1: SIMD2(Float(point.x), Float(point.y)),
-                    r0: radius(age: previousAge, settings: settings),
-                    r1: radius(age: age, settings: settings),
-                    u0: Float(previousAge),
-                    u1: Float(age)
+                    p0: SIMD2(Float(a.point.x), Float(a.point.y)),
+                    p1: SIMD2(Float(b.point.x), Float(b.point.y)),
+                    r0: radius(age: a.age, distance: a.distance, settings: settings),
+                    r1: radius(age: b.age, distance: b.distance, settings: settings),
+                    u0: Float(a.age),
+                    u1: Float(b.age)
                 ))
-                previous = point
-                previousAge = age
             }
         }
 
@@ -115,12 +135,37 @@ public enum TrailGeometry {
         // to its newer end across its own length, and on slow movement that is
         // a fraction of a point, a sharp step across the whole halo. Every
         // other capsule's step is covered by the round cap of the capsule ahead
-        // of it; this gives the newest one the same cover.
-        if let head = pts.last {
-            let p = SIMD2<Float>(Float(head.point.x), Float(head.point.y))
-            let r = radius(age: head.age, settings: settings)
-            let u = Float(head.age)
-            segments.append(TrailSegment(p0: p, p1: p, r0: r, r1: r, u0: u, u1: u))
+        // of it; this gives the newest one the same cover. Comet makes it the
+        // comet's bright head.
+        let p = SIMD2<Float>(Float(head.point.x), Float(head.point.y))
+        let r = settings.style == .comet
+            ? Float(settings.width * 0.7)
+            : radius(age: head.age, distance: head.distance, settings: settings)
+        let u = Float(head.age)
+        segments.append(TrailSegment(p0: p, p1: p, r0: r, r1: r, u0: u, u1: u))
+    }
+
+    /// Dotted style: a round dot wherever the stroke's distance crosses a
+    /// multiple of the dot period. Dots are tied to stroke distance, so they
+    /// stay where they were laid down while they fade.
+    private static func appendDots(along path: [PathPoint], settings: TrailSettings, into segments: inout [TrailSegment]) {
+        let period = dotPeriod(settings: settings)
+        func dot(at point: CGPoint, age: Double, distance: Double) {
+            let p = SIMD2<Float>(Float(point.x), Float(point.y))
+            let r = radius(age: age, distance: distance, settings: settings) * 0.9
+            segments.append(TrailSegment(p0: p, p1: p, r0: r, r1: r, u0: Float(age), u1: Float(age)))
+        }
+        for (a, b) in zip(path, path.dropFirst()) where b.distance > a.distance {
+            var k = (a.distance / period).rounded(.up)
+            while k * period < b.distance {
+                let f = (k * period - a.distance) / (b.distance - a.distance)
+                let point = CGPoint(
+                    x: a.point.x + (b.point.x - a.point.x) * f,
+                    y: a.point.y + (b.point.y - a.point.y) * f
+                )
+                dot(at: point, age: a.age + (b.age - a.age) * f, distance: k * period)
+                k += 1
+            }
         }
     }
 

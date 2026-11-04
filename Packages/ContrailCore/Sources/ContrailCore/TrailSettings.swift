@@ -1,5 +1,34 @@
 import Foundation
 
+/// How the trail is drawn.
+public enum TrailStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+    /// A glowing tube with a white-hot core.
+    case neon
+    /// A bright head with a short, thin tail and particles shed behind it.
+    case comet
+    /// A flat glowing band that twists along the path.
+    case ribbon
+    /// Evenly spaced glowing dots.
+    case dotted
+    /// The neon tube, throwing off sparks.
+    case sparks
+
+    public var id: String { rawValue }
+
+    public var name: String {
+        switch self {
+        case .neon: "Neon"
+        case .comet: "Comet"
+        case .ribbon: "Ribbon"
+        case .dotted: "Dotted"
+        case .sparks: "Sparks"
+        }
+    }
+
+    /// Whether this style emits particles (and so uses the Sparks amount).
+    public var hasParticles: Bool { self == .comet || self == .sparks }
+}
+
 /// Everything the user can tune about the trail. Persisted as versioned JSON;
 /// unknown or missing keys fall back to defaults so old and new builds can read
 /// each other's settings.
@@ -32,6 +61,9 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     /// Preset whose head color is used for right and middle clicks. Left
     /// clicks use the trail's own color.
     public var rightClickPresetID: String
+    public var style: TrailStyle
+    /// Particle amount for the Comet and Sparks styles, 0…1.
+    public var sparks: Double
 
     public static let widthRange: ClosedRange<Double> = 2...20
     public static let lengthRange: ClosedRange<Double> = 0.15...1.5
@@ -55,7 +87,9 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         highContrast: Bool = false,
         clickRipples: Bool = false,
         clickSize: Double = 56,
-        rightClickPresetID: String = "magenta"
+        rightClickPresetID: String = "magenta",
+        style: TrailStyle = .neon,
+        sparks: Double = 0.45
     ) {
         self.version = Self.currentVersion
         self.isEnabled = isEnabled
@@ -71,6 +105,8 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.clickRipples = clickRipples
         self.clickSize = clickSize
         self.rightClickPresetID = rightClickPresetID
+        self.style = style
+        self.sparks = sparks
     }
 
     /// The same settings with every value forced into its valid range.
@@ -88,6 +124,7 @@ public struct TrailSettings: Codable, Equatable, Sendable {
             copy.presetID = ColorPreset.defaultID
         }
         copy.clickSize = clickSize.clamped(to: Self.clickSizeRange)
+        copy.sparks = sparks.clamped(to: Self.unitRange)
         if ColorPreset.preset(id: rightClickPresetID) == nil {
             copy.rightClickPresetID = TrailSettings.default.rightClickPresetID
         }
@@ -108,7 +145,7 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case version, isEnabled, presetID, width, length, glow
         case taper, followSpeed, linger, opacity, highContrast
-        case clickRipples, clickSize, rightClickPresetID
+        case clickRipples, clickSize, rightClickPresetID, style, sparks
     }
 
     public init(from decoder: Decoder) throws {
@@ -128,6 +165,9 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.clickRipples = (try? c.decodeIfPresent(Bool.self, forKey: .clickRipples)) ?? d.clickRipples
         self.clickSize = (try? c.decodeIfPresent(Double.self, forKey: .clickSize)) ?? d.clickSize
         self.rightClickPresetID = (try? c.decodeIfPresent(String.self, forKey: .rightClickPresetID)) ?? d.rightClickPresetID
+        // An unknown style (from a newer version) falls back to Neon.
+        self.style = (try? c.decodeIfPresent(TrailStyle.self, forKey: .style)) ?? d.style
+        self.sparks = (try? c.decodeIfPresent(Double.self, forKey: .sparks)) ?? d.sparks
     }
 }
 
