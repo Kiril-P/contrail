@@ -547,6 +547,25 @@ import Testing
         #expect(drag <= Float(TrailSettings.dragMaxWidth / 2) + 0.001)
     }
 
+    /// At drag start the head only has earlier points to average with, so
+    /// it reaches the drag color over a few frames. Bound how long that takes.
+    @Test func headTurnsToTheDragColorQuickly() {
+        let s = TrailSettings(width: 8, taper: 0, followSpeed: 1)
+        var engine = TrailEngine()
+        var weights: [Float] = []
+        for frame in 0..<30 {
+            engine.update(cursor: CGPoint(x: Double(frame) * 5, y: 0), now: Double(frame) / 120,
+                          settings: s, dragging: frame >= 20)
+            if frame >= 20 {
+                let segments = TrailGeometry.segments(for: engine.visiblePoints(length: s.length), settings: s)
+                weights.append(segments.last!.d0)
+            }
+        }
+        #expect(weights[0] > 0.2)          // visible on the first dragged frame
+        #expect(weights[3] > 0.9)          // essentially full within ~20 pt
+        #expect(zip(weights, weights.dropFirst()).allSatisfy { $0 <= $1 + 0.001 })
+    }
+
     @Test func dragColorFadesInAlongTheTrail() {
         let s = TrailSettings(width: 8, taper: 0, followSpeed: 1)
         let weights = dragged(s, draggingFrom: 20).map(\.d0)
