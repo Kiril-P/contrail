@@ -150,7 +150,7 @@ import Testing
     }
 
     @Test func segmentLayoutMatchesShader() {
-        #expect(MemoryLayout<TrailSegment>.stride == 32)
+        #expect(MemoryLayout<TrailSegment>.stride == 40)
     }
 }
 
@@ -495,6 +495,99 @@ import Testing
         s.offInGames = false
         let decoded = try JSONDecoder().decode(TrailSettings.self, from: JSONEncoder().encode(s))
         #expect(decoded == s)
+    }
+}
+
+@Suite struct DragTests {
+    func dragged(_ settings: TrailSettings, draggingFrom start: Int) -> [TrailSegment] {
+        var engine = TrailEngine()
+        for frame in 0..<40 {
+            engine.update(cursor: CGPoint(x: Double(frame) * 5, y: 0), now: Double(frame) / 120,
+                          settings: settings, dragging: frame >= start)
+        }
+        return TrailGeometry.segments(for: engine.visiblePoints(length: settings.length), settings: settings)
+    }
+
+    @Test func draggedStretchIsWiderAndFlagged() {
+        let s = TrailSettings(width: 8, taper: 0, followSpeed: 1)
+        let segments = dragged(s, draggingFrom: 20)
+        let normal = segments.filter { $0.d0 == 0 && $0.d1 == 0 }
+        let drag = segments.filter { $0.d0 == 1 && $0.d1 == 1 }
+        #expect(!normal.isEmpty && !drag.isEmpty)
+        #expect(normal.allSatisfy { $0.r0 == 4 })
+        #expect(drag.allSatisfy { abs($0.r0 - 6.4) < 0.001 })
+        // The head is dragged too.
+        #expect(segments.last!.d0 == 1)
+    }
+
+    @Test func turningItOffDrawsNoHighlight() {
+        var s = TrailSettings(width: 8, taper: 0, followSpeed: 1)
+        s.dragHighlight = false
+        #expect(dragged(s, draggingFrom: 0).allSatisfy { $0.d0 == 0 && $0.r0 == 4 })
+    }
+
+    @Test func dragWidthIsCapped() {
+        let s = TrailSettings(width: 20, taper: 0, followSpeed: 1)
+        #expect(dragged(s, draggingFrom: 0).allSatisfy { $0.r0 <= Float(TrailSettings.dragMaxWidth / 2) + 0.001 })
+        // A ribbon this wide is already past the cap, so dragging doesn't
+        // widen it at all (it still changes color).
+        var ribbon = s
+        ribbon.style = .ribbon
+        let plain = dragged(ribbon, draggingFrom: 1000).map(\.r0)
+        let drag = dragged(ribbon, draggingFrom: 0).map(\.r0)
+        #expect(plain == drag)
+    }
+
+    @Test func cometHeadWidensWhenDragging() {
+        var s = TrailSettings(width: 8, followSpeed: 1)
+        s.style = .comet
+        let still = dragged(s, draggingFrom: 1000).last!.r0
+        let drag = dragged(s, draggingFrom: 0).last!.r0
+        #expect(drag > still)
+        #expect(drag <= Float(TrailSettings.dragMaxWidth / 2) + 0.001)
+    }
+
+    /// At drag start the head only has earlier points to average with, so
+    /// it reaches the drag color over a few frames. Bound how long that takes.
+    @Test func headTurnsToTheDragColorQuickly() {
+        let s = TrailSettings(width: 8, taper: 0, followSpeed: 1)
+        var engine = TrailEngine()
+        var weights: [Float] = []
+        for frame in 0..<30 {
+            engine.update(cursor: CGPoint(x: Double(frame) * 5, y: 0), now: Double(frame) / 120,
+                          settings: s, dragging: frame >= 20)
+            if frame >= 20 {
+                let segments = TrailGeometry.segments(for: engine.visiblePoints(length: s.length), settings: s)
+                weights.append(segments.last!.d0)
+            }
+        }
+        #expect(weights[0] > 0.2)          // visible on the first dragged frame
+        #expect(weights[3] > 0.9)          // essentially full within ~20 pt
+        #expect(zip(weights, weights.dropFirst()).allSatisfy { $0 <= $1 + 0.001 })
+    }
+
+    @Test func dragColorFadesInAlongTheTrail() {
+        let s = TrailSettings(width: 8, taper: 0, followSpeed: 1)
+        let weights = dragged(s, draggingFrom: 20).map(\.d0)
+        // Somewhere between plain and dragged there are in-between weights.
+        #expect(weights.contains { $0 > 0.05 && $0 < 0.95 })
+        #expect(weights.first == 0 && weights.last == 1)
+    }
+
+    @Test func automaticDragColorContrastsWithTheTrail() {
+        let amber = ColorPreset.preset(id: "amber")!.stops[0]
+        let cyan = ColorPreset.preset(id: "cyan")!.stops[0]
+        #expect(TrailSettings(presetID: "cyan").dragColor == amber)
+        #expect(TrailSettings(presetID: "sunset").dragColor == cyan)
+        var chosen = TrailSettings(presetID: "cyan")
+        chosen.dragPresetID = "lime"
+        #expect(chosen.dragColor == ColorPreset.preset(id: "lime")!.stops[0])
+    }
+
+    @Test func dragSettingsDecodeWithDefaults() throws {
+        let s = try JSONDecoder().decode(TrailSettings.self, from: #"{"dragPresetID": "nope"}"#.data(using: .utf8)!)
+        #expect(s.dragHighlight)
+        #expect(s.clamped().dragPresetID == nil)
     }
 }
 

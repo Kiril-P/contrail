@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 /// One capsule of the trail, laid out to match the `Segment` struct in the
-/// Metal shader (32 bytes).
+/// Metal shader (40 bytes).
 public struct TrailSegment: Equatable, Sendable {
     public var p0: SIMD2<Float>
     public var p1: SIMD2<Float>
@@ -12,14 +12,19 @@ public struct TrailSegment: Equatable, Sendable {
     /// Trail age (0 head … 1 tail) at each end.
     public var u0: Float
     public var u1: Float
+    /// Drag weight (0 normal … 1 dragged) at each end.
+    public var d0: Float
+    public var d1: Float
 
-    public init(p0: SIMD2<Float>, p1: SIMD2<Float>, r0: Float, r1: Float, u0: Float, u1: Float) {
+    public init(p0: SIMD2<Float>, p1: SIMD2<Float>, r0: Float, r1: Float, u0: Float, u1: Float, d0: Float = 0, d1: Float = 0) {
         self.p0 = p0
         self.p1 = p1
         self.r0 = r0
         self.r1 = r1
         self.u0 = u0
         self.u1 = u1
+        self.d0 = d0
+        self.d1 = d1
     }
 
     /// Bounding box of the core (without glow).
@@ -89,17 +94,75 @@ public enum TrailGeometry {
         var point: CGPoint
         var age: Double
         var distance: Double
+        var drag: Double = 0
+    }
+
+    /// How much a dragged stretch widens: 1.6×, reduced so the style's
+    /// widest point stays within the drag width cap. One factor for the
+    /// whole trail, so tapers and ribbon twists keep their shape.
+    static func dragScale(fullRadius: Double) -> Double {
+        let cap = TrailSettings.dragMaxWidth / 2
+        return min(max(cap / max(fullRadius, 0.001), 1), TrailSettings.dragWidthScale)
+    }
+
+    /// The widest radius a style reaches (before taper), for `dragScale`.
+    static func fullRadius(settings: TrailSettings) -> Double {
+        switch settings.style {
+        case .neon, .sparks, .dotted: settings.width * 0.5
+        case .ribbon: settings.width
+        case .comet: settings.width * 0.275
+        }
+    }
+
+    /// Radius at a path point, widened where the trail was dragged.
+    private static func radius(at p: PathPoint, settings: TrailSettings) -> Float {
+        let base = radius(age: p.age, distance: p.distance, settings: settings)
+        guard p.drag > 0, settings.dragHighlight else { return base }
+        let scale = dragScale(fullRadius: fullRadius(settings: settings))
+        return base * Float(1 + (scale - 1) * p.drag)
+    }
+
+    /// Softens the switch to and from the drag color over about four trail
+    /// widths, so the two colors' halos don't meet head-on (with MAX
+    /// blending that would flash a pale blob at each end of a drag).
+    private static func smoothDrag(_ path: [PathPoint], settings: TrailSettings) -> [PathPoint] {
+        guard settings.dragHighlight, path.contains(where: { $0.drag > 0 }) else { return path }
+        let half = max(settings.width * 2, 8)
+        var result = path
+        var lo = 0
+        var hi = 0
+        for i in path.indices {
+            let d = path[i].distance
+            while lo < path.count, path[lo].distance < d - half { lo += 1 }
+            while hi < path.count, path[hi].distance <= d + half { hi += 1 }
+            var sum = 0.0
+            var weights = 0.0
+            for j in lo..<hi {
+                let w = 1 - abs(path[j].distance - d) / half
+                sum += path[j].drag * w
+                weights += w
+            }
+            result[i].drag = weights > 0 ? sum / weights : path[i].drag
+        }
+        return result
+    }
+
+    private static func dragWeight(_ p: PathPoint, settings: TrailSettings) -> Float {
+        settings.dragHighlight ? Float(p.drag) : 0
     }
 
     private static func appendStroke(_ stroke: ArraySlice<TrailPoint>, settings: TrailSettings, into segments: inout [TrailSegment]) {
         let pts = Array(stroke)
         guard let first = pts.first, let head = pts.last else { return }
+        // The head's drag weight after smoothing.
+        var headDrag = head.drag
 
         if settings.style == .dotted {
             // Dots go on the straight lines between recorded samples rather
             // than the spline: a spline segment changes shape when the next
             // sample arrives, which would nudge dots that are already shown.
-            let polyline = pts.map { PathPoint(point: $0.point, age: $0.age, distance: $0.distance) }
+            let polyline = smoothDrag(pts.map { PathPoint(point: $0.point, age: $0.age, distance: $0.distance, drag: $0.drag) }, settings: settings)
+            headDrag = polyline.last?.drag ?? headDrag
             appendDots(along: polyline, settings: settings, into: &segments)
             // The head dot marks the cursor, unless it would sit on top of
             // the last dot laid in the visible part of this stroke.
@@ -111,7 +174,7 @@ public enum TrailGeometry {
             }
         } else {
             // Smooth the stroke into closely spaced points.
-            var path = [PathPoint(point: first.point, age: first.age, distance: first.distance)]
+            var path = [PathPoint(point: first.point, age: first.age, distance: first.distance, drag: first.drag)]
             if pts.count > 1 {
                 for i in 0..<(pts.count - 1) {
                     let p1 = pts[i].point
@@ -125,19 +188,24 @@ public enum TrailGeometry {
                         path.append(PathPoint(
                             point: step == steps ? p2 : catmullRom(p0, p1, p2, p3, t: t),
                             age: pts[i].age + (pts[i + 1].age - pts[i].age) * Double(t),
-                            distance: pts[i].distance + (pts[i + 1].distance - pts[i].distance) * Double(t)
+                            distance: pts[i].distance + (pts[i + 1].distance - pts[i].distance) * Double(t),
+                            drag: pts[i].drag + (pts[i + 1].drag - pts[i].drag) * Double(t)
                         ))
                     }
                 }
             }
+            path = smoothDrag(path, settings: settings)
+            headDrag = path.last?.drag ?? headDrag
             for (a, b) in zip(path, path.dropFirst()) {
                 segments.append(TrailSegment(
                     p0: SIMD2(Float(a.point.x), Float(a.point.y)),
                     p1: SIMD2(Float(b.point.x), Float(b.point.y)),
-                    r0: radius(age: a.age, distance: a.distance, settings: settings),
-                    r1: radius(age: b.age, distance: b.distance, settings: settings),
+                    r0: radius(at: a, settings: settings),
+                    r1: radius(at: b, settings: settings),
                     u0: Float(a.age),
-                    u1: Float(b.age)
+                    u1: Float(b.age),
+                    d0: dragWeight(a, settings: settings),
+                    d1: dragWeight(b, settings: settings)
                 ))
             }
         }
@@ -149,11 +217,16 @@ public enum TrailGeometry {
         // of it; this gives the newest one the same cover. Comet makes it the
         // comet's bright head.
         let p = SIMD2<Float>(Float(head.point.x), Float(head.point.y))
-        let r = settings.style == .comet
-            ? Float(settings.width * 0.7)
-            : radius(age: head.age, distance: head.distance, settings: settings)
+        let headPoint = PathPoint(point: head.point, age: head.age, distance: head.distance, drag: headDrag)
+        var r = radius(at: headPoint, settings: settings)
+        if settings.style == .comet {
+            let headRadius = settings.width * 0.7
+            let scale = settings.dragHighlight ? dragScale(fullRadius: headRadius) : 1
+            r = Float(headRadius * (1 + (scale - 1) * headDrag))
+        }
         let u = Float(head.age)
-        segments.append(TrailSegment(p0: p, p1: p, r0: r, r1: r, u0: u, u1: u))
+        let d = dragWeight(headPoint, settings: settings)
+        segments.append(TrailSegment(p0: p, p1: p, r0: r, r1: r, u0: u, u1: u, d0: d, d1: d))
     }
 
     /// Dotted style: a round dot wherever the stroke's distance crosses a
@@ -161,10 +234,12 @@ public enum TrailGeometry {
     /// stay where they were laid down while they fade.
     private static func appendDots(along path: [PathPoint], settings: TrailSettings, into segments: inout [TrailSegment]) {
         let period = dotPeriod(settings: settings)
-        func dot(at point: CGPoint, age: Double, distance: Double) {
+        func dot(at point: CGPoint, age: Double, distance: Double, drag: Double) {
             let p = SIMD2<Float>(Float(point.x), Float(point.y))
-            let r = radius(age: age, distance: distance, settings: settings) * 0.9
-            segments.append(TrailSegment(p0: p, p1: p, r0: r, r1: r, u0: Float(age), u1: Float(age)))
+            let at = PathPoint(point: point, age: age, distance: distance, drag: drag)
+            let r = radius(at: at, settings: settings) * 0.9
+            let d = dragWeight(at, settings: settings)
+            segments.append(TrailSegment(p0: p, p1: p, r0: r, r1: r, u0: Float(age), u1: Float(age), d0: d, d1: d))
         }
         for (a, b) in zip(path, path.dropFirst()) where b.distance > a.distance {
             var k = (a.distance / period).rounded(.up)
@@ -174,7 +249,7 @@ public enum TrailGeometry {
                     x: a.point.x + (b.point.x - a.point.x) * f,
                     y: a.point.y + (b.point.y - a.point.y) * f
                 )
-                dot(at: point, age: a.age + (b.age - a.age) * f, distance: k * period)
+                dot(at: point, age: a.age + (b.age - a.age) * f, distance: k * period, drag: a.drag + (b.drag - a.drag) * f)
                 k += 1
             }
         }

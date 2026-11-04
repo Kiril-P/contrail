@@ -65,7 +65,7 @@ struct AppearanceSettings: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Clicks") {
+            Section("Clicks and drags") {
                 Toggle(isOn: settings.clickRipples) {
                     Text("Click ripples")
                     Text("Show an expanding ring wherever you click. Left clicks use the trail color.")
@@ -76,6 +76,18 @@ struct AppearanceSettings: View {
                     PresetPicker(selection: settings.rightClickPresetID, size: 22, spacing: 8)
                 }
                 .disabled(!store.settings.clickRipples)
+                Toggle(isOn: settings.dragHighlight) {
+                    Text("Drag highlight")
+                    Text("While you hold a mouse button and drag, the trail turns a second color and gets wider.")
+                }
+                Picker("Drag color", selection: settings.dragPresetID) {
+                    Text("Automatic").tag(String?.none)
+                    Divider()
+                    ForEach(ColorPreset.all) { preset in
+                        Text(preset.name).tag(Optional(preset.id))
+                    }
+                }
+                .disabled(!store.settings.dragHighlight)
             }
 
             Section("Motion") {

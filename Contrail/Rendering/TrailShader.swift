@@ -19,6 +19,8 @@ enum TrailShader {
         float r1;
         float u0;
         float u1;
+        float d0;     // drag weight at each end
+        float d1;
     };
 
     struct Uniforms {
@@ -33,6 +35,7 @@ enum TrailShader {
         float style;          // 0 neon, 1 comet, 2 ribbon, 3 dotted, 4 sparks
         float pad1;
         float4 stops[4];
+        float4 dragColor;
     };
 
     constant int kStyleComet = 1;
@@ -45,6 +48,7 @@ enum TrailShader {
         float2 p0 [[flat]];
         float2 p1 [[flat]];
         float4 ru [[flat]];   // r0, r1, u0, u1
+        float2 drag [[flat]]; // d0, d1
     };
 
     // Glow lobes, as multiples of the head width.
@@ -93,6 +97,7 @@ enum TrailShader {
         out.p0 = s.p0;
         out.p1 = s.p1;
         out.ru = float4(s.r0, s.r1, s.u0, s.u1);
+        out.drag = float2(s.d0, s.d1);
         return out;
     }
 
@@ -140,7 +145,12 @@ enum TrailShader {
         float r = mix(in.ru.x, in.ru.y, dh.y);
         float age = clamp(mix(in.ru.z, in.ru.w, dh.y), 0.0, 1.0);
         float aa = u.pixel;
-        float3 base = gradientColor(age, u);
+        // Stretches drawn while dragging take the drag color. The blend runs
+        // in linear light (brighter midpoints than sRGB); for complementary
+        // colors it still passes near grey, which is why the geometry spreads
+        // the transition over several widths so that patch stays short.
+        float dragMix = mix(in.drag.x, in.drag.y, dh.y);
+        float3 base = pow(mix(pow(gradientColor(age, u), 2.2), pow(u.dragColor.rgb, 2.2), dragMix), 1.0 / 2.2);
 
         if (u.highContrast > 0.5) {
             // Matte: an opaque body in a darkened hue, a 1 pt rim in the same

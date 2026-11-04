@@ -28,6 +28,10 @@ struct MenuPopover: View {
                     help: "Show a ring wherever you click", isOn: settings.clickRipples
                 )
                 QuickToggle(
+                    title: "Drag highlight", systemImage: "hand.draw.fill",
+                    help: "Highlight the trail while you hold a mouse button and drag", isOn: settings.dragHighlight
+                )
+                QuickToggle(
                     title: "High contrast", systemImage: "circle.lefthalf.filled",
                     help: "A solid, outlined trail for light backgrounds", isOn: settings.highContrast
                 )

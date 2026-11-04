@@ -38,11 +38,14 @@ Click the Contrail icon in the menu bar and pick a **Look**: six hand-tuned trai
 Choose **S / M / L** to size any Look for your screen or projector, and flip the quick toggles:
 
 - **Click ripples**: an expanding ring wherever you click, great for screen recordings
+- **Drag highlight**: while you hold a mouse button and drag, the trail turns a second color and gets wider, so selections and window moves stand out
 - **High contrast**: a solid, outlined trail that stays readable on white documents and web pages
 
 ![High contrast mode on a white background](docs/high-contrast.png)
 
 ![Click ripples](docs/click-ripples.png)
+
+![Drag highlight](docs/drag-highlight.png)
 
 **Settings…** (⌘,) has everything else: color, style (Neon, Comet, Ribbon, Dotted, Sparks), width, length, glow, taper, opacity, sparks, ripple size and colors, follow and hold. Changing any of them turns your trail into a **Custom** look, and **Reset** takes you back to the Look it started from.
 
