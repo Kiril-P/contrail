@@ -159,15 +159,26 @@ final class TrailController {
             // Another button already down means this press joins a drag in
             // progress rather than starting a new one.
             let otherButtons = NSEvent.pressedMouseButtons & ~(1 << event.buttonNumber)
-            MainActor.assumeIsolated {
-                if otherButtons == 0 { self?.pressed(at: pressLocation) }
-            }
             let primary = event.type == .leftMouseDown && !flags.contains(.control)
             // For global events there's no window, so this is already in
-            // screen coordinates: where the click happened, even if the
+            // screen coordinates: where the press happened, even if the
             // cursor has moved on by the time this runs.
+            MainActor.assumeIsolated {
+                guard otherButtons == 0 else { return }
+                self?.pressed(at: pressLocation)
+                self?.press(at: pressLocation, primary: primary, flags: flags)
+            }
+        }) {
+            monitors.append(global)
+        }
+        let releases: NSEvent.EventTypeMask = [.leftMouseUp, .rightMouseUp, .otherMouseUp]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: releases, handler: { [weak self] event in
             let location = event.locationInWindow
-            MainActor.assumeIsolated { self?.click(at: location, primary: primary, flags: flags) }
+            let otherButtons = NSEvent.pressedMouseButtons & ~(1 << event.buttonNumber)
+            MainActor.assumeIsolated {
+                // The gesture ends when the last button comes up.
+                if otherButtons == 0 { self?.release(at: location) }
+            }
         }) {
             monitors.append(global)
         }
@@ -205,18 +216,27 @@ final class TrailController {
         if !pressIsDrag, hypot(cursor.x - start.x, cursor.y - start.y) >= 4 {
             pressIsDrag = true
         }
-        return settings.dragHighlight && pressIsDrag
+        return settings.pressEffects && pressIsDrag
     }
 
-    private func click(at location: CGPoint, primary: Bool, flags: NSEvent.ModifierFlags) {
+    /// A button went down: a ring appears at the cursor and stays on it
+    /// until the button comes up (see `release(at:)`).
+    private func press(at location: CGPoint, primary: Bool, flags: NSEvent.ModifierFlags) {
         let settings = store.settings
-        guard activation.isOn, settings.clickRipples, settings.holdModifier.isSatisfied(by: flags) else { return }
-        ripples.add(at: location, time: CACurrentMediaTime(), color: settings.rippleColor(primary: primary))
+        guard activation.isOn, settings.pressEffects, settings.holdModifier.isSatisfied(by: flags) else { return }
+        ripples.press(at: location, time: CACurrentMediaTime(), color: settings.rippleColor(primary: primary))
         // The cursor may have moved while the trail slept or drained (hold
         // key up, or trail off); a click alone shouldn't start a trail here.
         if engine.isAwaitingStroke {
             restingCursor = NSEvent.mouseLocation
         }
+        wake()
+    }
+
+    /// The last button came up: the held ring ripples out from here.
+    private func release(at location: CGPoint) {
+        guard ripples.isHolding else { return }
+        ripples.release(at: location, time: CACurrentMediaTime())
         wake()
     }
 
@@ -262,6 +282,7 @@ final class TrailController {
             // otherwise let the trail drain away. After a reset (sleep, wake,
             // enable, screen change), don't start a trail until the cursor
             // actually moves; a click alone only shows its ripple.
+            let dragging = isDragging(cursor: cursor, settings: settings)
             let holding = settings.holdModifier.isSatisfied(by: NSEvent.modifierFlags)
             if holding && !wasHolding {
                 // Pressing the hold key starts a trail only once the cursor
@@ -277,7 +298,7 @@ final class TrailController {
             } else {
                 restingCursor = nil
                 engine.update(cursor: cursor, now: now, settings: settings,
-                              dragging: isDragging(cursor: cursor, settings: settings))
+                              dragging: dragging)
             }
             let points = engine.visiblePoints(length: settings.length)
             // No head while the hold key is up or on a stroke's first sample,
@@ -285,6 +306,16 @@ final class TrailController {
             let head = engine.samples.last
             let particleHead = holding && head?.startsStroke == false ? head?.point : nil
             particles.update(head: particleHead, dt: dt, settings: settings)
+            // The held ring rides on the cursor, turning the drag color once
+            // the press becomes a drag. If the release happened where the
+            // global monitor can't see it (Contrail's own windows), let go here.
+            if ripples.isHolding {
+                if NSEvent.pressedMouseButtons == 0 {
+                    ripples.release(at: cursor, time: now)
+                } else {
+                    ripples.move(to: cursor, time: now, dragColor: dragging ? settings.dragColor : nil)
+                }
+            }
             ripples.prune(now: now)
             frameContent = TrailFrame(
                 segments: TrailGeometry.segments(for: points, settings: settings),

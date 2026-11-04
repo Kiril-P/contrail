@@ -35,8 +35,7 @@ final class PreviewTrailView: NSView {
     private var ripples = RippleSystem()
     private var particles = ParticleSystem()
     private var lastStep: Double?
-    private var nextClick: Double = 0
-    private var clickCount = 0
+    private var previousLoop = 0.0
     private var driver: FrameDriver?
     private var startTime = CACurrentMediaTime()
     private var occlusionObserver: NSObjectProtocol?
@@ -112,12 +111,12 @@ final class PreviewTrailView: NSView {
         return CGPoint(x: x, y: y)
     }
 
-    /// With Reduce Motion on, show one still trail (and, with click ripples
+    /// With Reduce Motion on, show one still trail (and, with clicks & drags
     /// on, one still ring) instead of animating.
     private func renderStill() {
         guard bounds.width > 0 else { return }
         var frame = SnapshotRenderer.sampleFrame(size: bounds.size, settings: settings)
-        if settings.clickRipples {
+        if settings.pressEffects {
             var still = RippleSystem()
             still.add(at: CGPoint(x: bounds.width * 0.82, y: bounds.height * 0.5), time: 0, color: settings.rippleColor(primary: true))
             frame.ripples = still.instances(now: RippleSystem.duration * 0.3, size: previewRippleSize, reduceMotion: true)
@@ -135,22 +134,33 @@ final class PreviewTrailView: NSView {
         guard bounds.width > 0 else { return }
         let now = CACurrentMediaTime()
         let cursor = cursorPosition(at: now - startTime)
-        // With drag highlight on, "hold the button" for part of every loop.
+        // With clicks & drags on, act out the gesture on every loop: a quick
+        // left click, a quick right click, then press, drag and release.
         let loop = ((now - startTime) * 1.1).truncatingRemainder(dividingBy: 2 * .pi)
-        let dragging = settings.dragHighlight && loop > 3.6 && loop < 5.4
+        let effects = settings.pressEffects
+        let dragging = effects && loop > 3.6 && loop < 5.4
         engine.update(cursor: cursor, now: now, settings: settings, dragging: dragging)
         let segments = TrailGeometry.segments(for: engine.visiblePoints(length: settings.length), settings: settings)
         particles.update(head: engine.samples.last?.point, dt: now - (lastStep ?? now), settings: settings)
         lastStep = now
 
-        // With click ripples on, "click" every 1.4 s, every third one a
-        // right click, so the ring colors and size are visible here too.
         ripples.prune(now: now)
-        if settings.clickRipples, now >= nextClick {
-            clickCount += 1
-            ripples.add(at: cursor, time: now, color: settings.rippleColor(primary: clickCount % 3 != 0))
-            nextClick = now + 1.4
+        if effects {
+            func crossed(_ mark: Double) -> Bool { previousLoop < mark && loop >= mark }
+            if crossed(1.2) || crossed(2.5) {
+                ripples.press(at: cursor, time: now, color: settings.rippleColor(primary: crossed(1.2)))
+            }
+            if crossed(1.32) || crossed(2.62) || crossed(5.4) {
+                ripples.release(at: cursor, time: now)
+            }
+            if crossed(3.4) {
+                ripples.press(at: cursor, time: now, color: settings.rippleColor(primary: true))
+            }
+            ripples.move(to: cursor, time: now, dragColor: dragging ? settings.dragColor : nil)
+        } else {
+            ripples.removeAll()
         }
+        previousLoop = loop
         let frame = TrailFrame(
             segments: segments,
             ripples: ripples.instances(now: now, size: previewRippleSize),
