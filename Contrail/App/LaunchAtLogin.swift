@@ -7,6 +7,16 @@ enum LaunchAtLogin {
         SMAppService.mainApp.status == .enabled
     }
 
+    /// True when the user turned Contrail off in System Settings → Login Items,
+    /// which the app can't override.
+    static var needsApproval: Bool {
+        SMAppService.mainApp.status == .requiresApproval
+    }
+
+    static func openLoginItemsSettings() {
+        SMAppService.openSystemSettingsLoginItems()
+    }
+
     /// Returns an error message when the change could not be applied.
     @discardableResult
     static func set(_ enabled: Bool) -> String? {

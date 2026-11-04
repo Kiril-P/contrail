@@ -87,8 +87,11 @@ public enum TrailGeometry {
             let a1 = pts[i].age
             let a2 = pts[i + 1].age
 
+            // Wide trails don't need fine subdivision, and each capsule's quad
+            // grows with the width, so space them out to bound overdraw.
+            let step = max(spacing, CGFloat(settings.width) * 0.35)
             let distance = hypot(p2.x - p1.x, p2.y - p1.y)
-            let steps = min(max(Int((distance / spacing).rounded(.up)), 1), maxSubdivisions)
+            let steps = min(max(Int((distance / step).rounded(.up)), 1), maxSubdivisions)
 
             var previous = p1
             var previousAge = a1

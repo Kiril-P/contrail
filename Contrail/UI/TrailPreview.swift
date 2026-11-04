@@ -22,9 +22,6 @@ final class PreviewTrailView: NSView {
     var settings: TrailSettings {
         didSet {
             guard oldValue != settings else { return }
-            if oldValue.followSpeed != settings.followSpeed || oldValue.length != settings.length {
-                engine.reset()
-            }
             if reduceMotion { renderStill() }
         }
     }
@@ -38,12 +35,18 @@ final class PreviewTrailView: NSView {
     private var driver: FrameDriver?
     private var startTime = CACurrentMediaTime()
     private var occlusionObserver: NSObjectProtocol?
+    private var reduceMotionObserver: NSObjectProtocol?
 
     init(settings: TrailSettings) {
         self.settings = settings
         super.init(frame: .zero)
         trailView.autoresizingMask = [.width, .height]
         addSubview(trailView)
+        reduceMotionObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateRunning() }
+        }
     }
 
     @available(*, unavailable)

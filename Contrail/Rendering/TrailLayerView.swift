@@ -51,7 +51,8 @@ final class TrailLayerView: NSView {
         if segments.isEmpty && isClear { return }
         let scale = metalLayer.contentsScale
         let uniforms = TrailUniforms(viewSize: bounds.size, origin: origin, scale: scale, settings: settings)
-        renderer.draw(segments, uniforms: uniforms, into: metalLayer)
-        isClear = segments.isEmpty
+        if renderer.draw(segments, uniforms: uniforms, into: metalLayer) {
+            isClear = segments.isEmpty
+        }
     }
 }

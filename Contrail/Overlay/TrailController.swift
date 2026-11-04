@@ -60,7 +60,8 @@ final class TrailController {
     private func setEnabled(_ enabled: Bool) {
         if enabled {
             for overlay in overlays { overlay.panel.orderFrontRegardless() }
-            wake()
+            // @Published emits before the new value is stored, so pass it on.
+            wake(enabled: true)
         } else {
             sleep()
             engine.reset()
@@ -120,8 +121,8 @@ final class TrailController {
     }
 
     /// Starts every display link if the trail is enabled and currently idle.
-    private func wake() {
-        guard store.settings.isEnabled, !isActive else { return }
+    private func wake(enabled: Bool? = nil) {
+        guard enabled ?? store.settings.isEnabled, !isActive else { return }
         isActive = true
         for overlay in overlays { overlay.driver.start() }
     }
@@ -154,9 +155,16 @@ final class TrailController {
         let onScreen = segments.filter { $0.bounds.intersects(visibleRect) }
         view.render(onScreen, origin: frame.origin, settings: settings)
 
-        if engine.isEmpty && overlays.allSatisfy(\.view.isClear) {
-            sleep()
-            engine.reset()
+        if engine.isEmpty {
+            // Clear every screen from here: a display that stopped ticking
+            // (standby, mirroring) would otherwise keep the others awake.
+            for other in overlays where !other.view.isClear {
+                other.view.render([], origin: other.panel.frame.origin, settings: settings)
+            }
+            if overlays.allSatisfy(\.view.isClear) {
+                sleep()
+                engine.reset()
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var store: SettingsStore
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
+    @State private var launchNeedsApproval = LaunchAtLogin.needsApproval
     @State private var launchError: String?
 
     private var settings: Binding<TrailSettings> { $store.settings }
@@ -43,10 +44,18 @@ struct SettingsView: View {
                     get: { launchAtLogin },
                     set: { newValue in
                         launchError = LaunchAtLogin.set(newValue)
-                        launchAtLogin = LaunchAtLogin.isEnabled
+                        refreshLoginItem()
                     }
                 ))
-                if let launchError {
+                if launchNeedsApproval {
+                    HStack {
+                        Text("Contrail is turned off in Login Items.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Open Login Items…") { LaunchAtLogin.openLoginItemsSettings() }
+                    }
+                } else if let launchError {
                     Text(launchError)
                         .font(.caption)
                         .foregroundStyle(.red)
@@ -67,6 +76,17 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
+        .onAppear(perform: refreshLoginItem)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshLoginItem()
+        }
+    }
+
+    /// The login item can change in System Settings while this window is
+    /// hidden, so re-read it whenever the window or app comes back.
+    private func refreshLoginItem() {
+        launchAtLogin = LaunchAtLogin.isEnabled
+        launchNeedsApproval = LaunchAtLogin.needsApproval
     }
 
     private func followLabel(_ value: Double) -> String {

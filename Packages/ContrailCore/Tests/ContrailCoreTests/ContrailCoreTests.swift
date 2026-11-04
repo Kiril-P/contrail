@@ -33,12 +33,38 @@ import Testing
             engine.update(cursor: CGPoint(x: Double(i) * 10, y: 0), now: now, settings: lingering)
             now += 1 / 60
         }
-        let before = engine.visiblePoints(length: lingering.length).count
+        // The hold starts once the cursor has been still for the grace period.
+        for _ in 0..<6 {
+            engine.update(cursor: CGPoint(x: 290, y: 0), now: now, settings: lingering)
+            now += 1 / 60
+        }
+        let before = engine.visiblePoints(length: lingering.length)
         for _ in 0..<60 {
             engine.update(cursor: CGPoint(x: 290, y: 0), now: now, settings: lingering)
             now += 1 / 60
         }
-        #expect(engine.visiblePoints(length: lingering.length).count == before)
+        #expect(engine.visiblePoints(length: lingering.length) == before)
+    }
+
+    /// A 120 Hz display with a 60 Hz mouse sees an unchanged position every
+    /// other frame. That must not count as a stop, or Hold would stretch the trail.
+    @Test func holdDoesNotDependOnDisplayRate() {
+        func visibleLength(linger: Double) -> CGFloat {
+            var s = settings
+            s.linger = linger
+            var engine = TrailEngine()
+            var x = 0.0
+            for frame in 0..<240 {
+                if frame % 2 == 0 { x += 10 }
+                engine.update(cursor: CGPoint(x: x, y: 0), now: Double(frame) / 120, settings: s)
+            }
+            let points = engine.visiblePoints(length: s.length)
+            return (points.last?.point.x ?? 0) - (points.first?.point.x ?? 0)
+        }
+        let withoutHold = visibleLength(linger: 0)
+        let withHold = visibleLength(linger: 0.5)
+        #expect(withoutHold > 200)
+        #expect(abs(withHold - withoutHold) < 15)
     }
 
     @Test func teleportStartsNewStroke() {

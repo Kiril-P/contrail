@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Renders a synthetic trail to a PNG without touching the real cursor.
 ///
-///     Contrail.app/Contents/MacOS/Contrail --snapshot out.png [--preset cyan] [--matte] [--background light|dark]
+///     Contrail.app/Contents/MacOS/Contrail --snapshot out.png [--preset cyan] [--matte] [--width 7] [--opacity 1] [--glow 0.7] [--background light|dark]
 ///     Contrail.app/Contents/MacOS/Contrail --snapshot-presets out.png
 ///     Contrail.app/Contents/MacOS/Contrail --snapshot-ui out.png
 ///
@@ -25,6 +25,12 @@ enum SnapshotRenderer {
         var settings = TrailSettings.default
         if let p = args.firstIndex(of: "--preset"), p + 1 < args.count { settings.presetID = args[p + 1] }
         settings.highContrast = args.contains("--matte")
+        func number(_ flag: String) -> Double? {
+            args.firstIndex(of: flag).flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil }
+        }
+        if let width = number("--width") { settings.width = width }
+        if let opacity = number("--opacity") { settings.opacity = opacity }
+        if let glow = number("--glow") { settings.glow = glow }
         let background = args.firstIndex(of: "--background").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
             ?? (settings.highContrast ? "light" : "dark")
         let ok = render(settings: settings.clamped(), background: background, to: output)

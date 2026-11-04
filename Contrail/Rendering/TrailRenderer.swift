@@ -84,14 +84,18 @@ final class TrailRenderer {
         layer.maximumDrawableCount = 3
     }
 
-    /// Draws `segments` (in global points) into `layer`. An empty array clears it.
-    func draw(_ segments: [TrailSegment], uniforms: TrailUniforms, into layer: CAMetalLayer) {
+    /// Draws `segments` (in global points) into `layer`. An empty array clears
+    /// it. Returns false when nothing could be submitted (no drawable), so the
+    /// caller can try again next frame.
+    @discardableResult
+    func draw(_ segments: [TrailSegment], uniforms: TrailUniforms, into layer: CAMetalLayer) -> Bool {
         guard layer.drawableSize.width > 0, layer.drawableSize.height > 0,
               let drawable = layer.nextDrawable(),
-              let commandBuffer = queue.makeCommandBuffer() else { return }
+              let commandBuffer = queue.makeCommandBuffer() else { return false }
         encode(segments, uniforms: uniforms, target: drawable.texture, commandBuffer: commandBuffer)
         commandBuffer.present(drawable)
         commandBuffer.commit()
+        return true
     }
 
     /// Renders into an offscreen texture and waits for the GPU. Used for

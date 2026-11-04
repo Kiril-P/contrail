@@ -52,12 +52,19 @@ enum TrailShader {
     constant float kShadowSigma = 2.0;
     constant float kShadowOffset = 1.0;
 
+    // Glow shrinks with the local radius toward the tail.
+    static float glowScale(float r, constant Uniforms& u) {
+        float headRadius = max(u.width * 0.5, 1e-3);
+        return mix(1.0, clamp(r / headRadius, 0.0, 1.0), 0.6);
+    }
+
     static float extentFor(Segment s, constant Uniforms& u) {
         float r = max(s.r0, s.r1);
         if (u.highContrast > 0.5) {
             return r + kMatteGrow + kMatteRim + kShadowOffset + 2.5 * kShadowSigma + 1.0;
         }
-        return r + (u.glow > 0.0 ? 2.5 * kWideSigma * u.width : 0.0) + 2.0;
+        float wideSigma = max(kWideSigma * u.width * glowScale(r, u), 1.0);
+        return r + (u.glow > 0.0 ? 2.5 * wideSigma : 0.0) + 2.0;
     }
 
     vertex VertexOut trail_vertex(uint vid [[vertex_id]],
@@ -132,7 +139,7 @@ enum TrailShader {
             // Matte: an opaque body in a darkened hue, a 1 pt rim in the same
             // hue, and a soft shadow. Stays readable on white backgrounds.
             float body = r + kMatteGrow;
-            float fade = u.opacity * (1.0 - smoothstep(0.6, 1.0, age));
+            float fade = 1.0 - smoothstep(0.6, 1.0, age);
             float3 fill = withLuminanceAtMost(base, 0.238);   // OKLCH L ~0.62
             float3 rimColor = withLuminance(base, 0.022);     // OKLCH L ~0.28
             float core = 1.0 - smoothstep(body - aa, body + aa, d);
@@ -141,12 +148,12 @@ enum TrailShader {
             float shadow = exp(-pow(max(ds - body, 0.0) / kShadowSigma, 2.0)) * 0.2 * (1.0 - rim);
             float3 color = fill * core + rimColor * (rim - core);
             float alpha = max(rim, shadow);
-            return float4(color * fade, alpha * fade);
+            return float4(color, alpha) * (fade * u.opacity);
         }
 
         // Glow: a saturated tube whose inner 40% runs white-hot near the head,
         // inside a tight halo plus a wide, faint one.
-        float fade = u.opacity * (1.0 - pow(age, 2.2));
+        float fade = 1.0 - pow(age, 2.2);
         float core = 1.0 - smoothstep(r - aa, r + aa, d);
         // Keep the hot band at least ~1.5 px wide so it never breaks into dots
         // where the tail gets thin, and let the tail end in pure color.
@@ -155,8 +162,7 @@ enum TrailShader {
         float hot = 0.85 * (1.0 - smoothstep(hotInner, hotOuter, d)) * pow(1.0 - age, 1.5);
         float3 coreColor = mix(base, float3(1.0), hot);
 
-        float headRadius = max(u.width * 0.5, 1e-3);
-        float scale = mix(1.0, clamp(r / headRadius, 0.0, 1.0), 0.6);
+        float scale = glowScale(r, u);
         float outside = max(d - r, 0.0);
         float tightSigma = max(kTightSigma * u.width * scale, 0.5);
         float wideSigma = max(kWideSigma * u.width * scale, 1.0);
@@ -170,9 +176,9 @@ enum TrailShader {
         float haloAlpha = (1.0 - core) * min(halo, 1.0) * haloFade;
         float coreAlpha = core * max(fade, edgeHalo);
 
-        // Premultiplied output.
+        // Premultiplied output; Opacity scales everything uniformly.
         float3 color = coreColor * coreAlpha + base * haloAlpha;
-        return float4(color, coreAlpha + haloAlpha);
+        return float4(color, coreAlpha + haloAlpha) * u.opacity;
     }
     """
 }
