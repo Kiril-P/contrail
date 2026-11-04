@@ -112,11 +112,23 @@ final class PreviewTrailView: NSView {
         return CGPoint(x: x, y: y)
     }
 
-    /// With Reduce Motion on, show one still trail instead of animating.
+    /// With Reduce Motion on, show one still trail (and, with click ripples
+    /// on, one still ring) instead of animating.
     private func renderStill() {
         guard bounds.width > 0 else { return }
-        let segments = SnapshotRenderer.sampleTrail(size: bounds.size, settings: settings)
-        trailView.render(TrailFrame(segments: segments), origin: .zero, settings: settings)
+        var frame = SnapshotRenderer.sampleFrame(size: bounds.size, settings: settings)
+        if settings.clickRipples {
+            var still = RippleSystem()
+            still.add(at: CGPoint(x: bounds.width * 0.82, y: bounds.height * 0.5), time: 0, color: settings.rippleColor(primary: true))
+            frame.ripples = still.instances(now: RippleSystem.duration * 0.3, size: previewRippleSize, reduceMotion: true)
+        }
+        trailView.render(frame, origin: .zero, settings: settings)
+    }
+
+    /// The full 24–128 pt range scaled to fit the preview, so every step of
+    /// the Size slider is visible.
+    private var previewRippleSize: Double {
+        settings.clickSize / TrailSettings.clickSizeRange.upperBound * Double(bounds.height) * 1.1
     }
 
     private func step() {
@@ -136,10 +148,9 @@ final class PreviewTrailView: NSView {
             ripples.add(at: cursor, time: now, color: settings.rippleColor(primary: clickCount % 3 != 0))
             nextClick = now + 1.4
         }
-        let size = min(settings.clickSize, Double(bounds.height) * 1.2)
         let frame = TrailFrame(
             segments: segments,
-            ripples: ripples.instances(now: now, size: size),
+            ripples: ripples.instances(now: now, size: previewRippleSize),
             particles: particles.instances(settings: settings)
         )
         trailView.render(frame, origin: .zero, settings: settings)

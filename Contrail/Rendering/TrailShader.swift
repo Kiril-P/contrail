@@ -271,7 +271,7 @@ enum TrailShader {
     };
 
     constant float kRippleTightSigma = 2.0;   // × ring width
-    constant float kRippleWideSigma = 6.0;    // × ring width
+    constant float kRippleWideSigma = 6.0;    // × ring width; keep RippleSystem.glowReach in sync
     constant float kMatteRingHalfWidth = 1.5;
 
     vertex RippleOut ripple_vertex(uint vid [[vertex_id]],

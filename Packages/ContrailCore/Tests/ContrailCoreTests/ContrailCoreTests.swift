@@ -190,6 +190,7 @@ import Testing
 
     @Test func rippleLayoutMatchesShader() {
         #expect(MemoryLayout<RippleInstance>.stride == 48)
+        #expect(MemoryLayout<RippleInstance>.offset(of: \RippleInstance.color) == 32)
     }
 
     @Test func rippleColors() {

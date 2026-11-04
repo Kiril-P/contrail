@@ -31,6 +31,10 @@ final class TrailController {
     private var isActive = false
     /// When the trail last became empty.
     private var emptySince: CFTimeInterval?
+    /// Where the cursor was when the display links last paused. A click wakes
+    /// the links for its ripple; until the cursor actually moves away from
+    /// here, the trail isn't fed, so a click alone never leaves a dot.
+    private var restingCursor: CGPoint?
 
     init(store: SettingsStore) {
         self.store = store
@@ -131,16 +135,20 @@ final class TrailController {
         let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: clicks, handler: { [weak self] event in
             let primary = event.type == .leftMouseDown && !event.modifierFlags.contains(.control)
-            MainActor.assumeIsolated { self?.click(primary: primary) }
+            // For global events there's no window, so this is already in
+            // screen coordinates: where the click happened, even if the
+            // cursor has moved on by the time this runs.
+            let location = event.locationInWindow
+            MainActor.assumeIsolated { self?.click(at: location, primary: primary) }
         }) {
             monitors.append(global)
         }
     }
 
-    private func click(primary: Bool) {
+    private func click(at location: CGPoint, primary: Bool) {
         let settings = store.settings
         guard settings.isEnabled, settings.clickRipples else { return }
-        ripples.add(at: NSEvent.mouseLocation, time: CACurrentMediaTime(), color: settings.rippleColor(primary: primary))
+        ripples.add(at: location, time: CACurrentMediaTime(), color: settings.rippleColor(primary: primary))
         wake()
     }
 
@@ -154,6 +162,7 @@ final class TrailController {
 
     private func sleep() {
         isActive = false
+        restingCursor = NSEvent.mouseLocation
         for overlay in overlays { overlay.driver.stop() }
     }
 
@@ -168,7 +177,13 @@ final class TrailController {
         if now - lastUpdate > 0.001 {
             let dt = now - lastUpdate
             lastUpdate = now
-            engine.update(cursor: NSEvent.mouseLocation, now: now, settings: settings)
+            let cursor = NSEvent.mouseLocation
+            if engine.isEmpty, cursor == restingCursor {
+                // Woken by a click, not by movement: don't start a trail.
+            } else {
+                restingCursor = nil
+                engine.update(cursor: cursor, now: now, settings: settings)
+            }
             let points = engine.visiblePoints(length: settings.length)
             particles.update(head: engine.samples.last?.point, dt: dt, settings: settings)
             ripples.prune(now: now)
@@ -188,7 +203,7 @@ final class TrailController {
         // The trail's wide glow reaches ~4× its width beyond the core; a
         // ripple's reaches ~40 pt beyond its ring.
         let trailRect = frame.insetBy(dx: -CGFloat(settings.width * 4.5 + 12), dy: -CGFloat(settings.width * 4.5 + 12))
-        let rippleRect = frame.insetBy(dx: -48, dy: -48)
+        let rippleRect = frame.insetBy(dx: -RippleSystem.glowReach, dy: -RippleSystem.glowReach)
         let onScreen = TrailFrame(
             segments: frameContent.segments.filter { $0.bounds.intersects(trailRect) },
             ripples: frameContent.ripples.filter { $0.bounds.intersects(rippleRect) },
