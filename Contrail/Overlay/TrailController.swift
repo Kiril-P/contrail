@@ -165,6 +165,7 @@ final class TrailController {
     /// rest", so the next frame doesn't turn a still cursor into a dot.
     private func resetTrail() {
         engine.reset()
+        particles.removeAll()
         restingCursor = NSEvent.mouseLocation
     }
 
