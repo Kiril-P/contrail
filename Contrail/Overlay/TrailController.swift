@@ -191,6 +191,10 @@ final class TrailController {
 
     private func sleep() {
         isActive = false
+        // Links only wake for movement or clicks with the hold key down (or
+        // for enable/rebuild, which set the resting cursor themselves), so a
+        // wake is never a fresh key press on a still cursor.
+        wasHolding = true
         restingCursor = NSEvent.mouseLocation
         for overlay in overlays { overlay.driver.stop() }
     }
@@ -218,9 +222,12 @@ final class TrailController {
                 restingCursor = cursor
             }
             wasHolding = holding
-            if !holding {
+            if !holding || (engine.isAwaitingStroke && cursor == restingCursor) {
+                // Hold key up, or the cursor hasn't moved since the trail was
+                // reset or the key went down: record nothing, but keep time
+                // moving so whatever is still visible drains away.
                 engine.drain(now: now, settings: settings)
-            } else if !(engine.isAwaitingStroke && cursor == restingCursor) {
+            } else {
                 restingCursor = nil
                 engine.update(cursor: cursor, now: now, settings: settings)
             }
