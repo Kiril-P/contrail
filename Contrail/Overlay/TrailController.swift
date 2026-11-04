@@ -55,7 +55,7 @@ final class TrailController {
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.engine.reset() }
+            MainActor.assumeIsolated { self?.resetTrail() }
         })
 
         activation.$decision
@@ -70,11 +70,12 @@ final class TrailController {
     private func setEnabled(_ enabled: Bool) {
         if enabled {
             for overlay in overlays { overlay.panel.orderFrontRegardless() }
+            restingCursor = NSEvent.mouseLocation
             // @Published emits before the new value is stored, so pass it on.
             wake(enabled: true)
         } else {
             sleep()
-            engine.reset()
+            resetTrail()
             ripples.removeAll()
             particles.removeAll()
             frameContent = .empty
@@ -96,7 +97,7 @@ final class TrailController {
         }
         overlays.removeAll()
         isActive = false
-        engine.reset()
+        resetTrail()
 
         for screen in NSScreen.screens {
             let panel = OverlayPanel(screen: screen)
@@ -162,6 +163,11 @@ final class TrailController {
         let settings = store.settings
         guard activation.isOn, settings.clickRipples, settings.holdModifier.isSatisfied(by: flags) else { return }
         ripples.add(at: location, time: CACurrentMediaTime(), color: settings.rippleColor(primary: primary))
+        // The cursor may have moved while the trail slept (hold key up, or
+        // trail off); a click alone shouldn't start a trail where it is now.
+        if engine.isEmpty {
+            restingCursor = NSEvent.mouseLocation
+        }
         wake()
     }
 
@@ -171,6 +177,14 @@ final class TrailController {
         isActive = true
         emptySince = nil
         for overlay in overlays { overlay.driver.start() }
+    }
+
+    /// Clears the trail and treats the cursor's current position as "at
+    /// rest", so the next frame doesn't turn a still cursor into a dot.
+    private func resetTrail() {
+        engine.reset()
+        particles.removeAll()
+        restingCursor = NSEvent.mouseLocation
     }
 
     private func sleep() {
@@ -192,13 +206,13 @@ final class TrailController {
             lastUpdate = now
             let cursor = NSEvent.mouseLocation
             // With a hold key set, record the cursor only while it's down;
-            // otherwise let the trail drain away.
+            // otherwise let the trail drain away. After a reset (sleep, wake,
+            // enable, screen change), don't start a trail until the cursor
+            // actually moves; a click alone only shows its ripple.
             let holding = settings.holdModifier.isSatisfied(by: NSEvent.modifierFlags)
             if !holding {
                 engine.drain(now: now, settings: settings)
-            } else if engine.isEmpty, cursor == restingCursor {
-                // Woken by a click, not by movement: don't start a trail.
-            } else {
+            } else if !(engine.isEmpty && cursor == restingCursor) {
                 restingCursor = nil
                 engine.update(cursor: cursor, now: now, settings: settings)
             }
@@ -251,7 +265,7 @@ final class TrailController {
         }
         if overlays.allSatisfy(\.view.isClear) {
             sleep()
-            engine.reset()
+            resetTrail()
         }
     }
 }

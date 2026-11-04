@@ -95,34 +95,40 @@ public enum TrailGeometry {
         let pts = Array(stroke)
         guard let first = pts.first, let head = pts.last else { return }
 
-        // Smooth the stroke into closely spaced points.
-        var path = [PathPoint(point: first.point, age: first.age, distance: first.distance)]
-        if pts.count > 1 {
-            for i in 0..<(pts.count - 1) {
-                let p1 = pts[i].point
-                let p2 = pts[i + 1].point
-                let p0 = i > 0 ? pts[i - 1].point : reflect(p2, about: p1)
-                let p3 = i + 2 < pts.count ? pts[i + 2].point : reflect(p1, about: p2)
-                let length = hypot(p2.x - p1.x, p2.y - p1.y)
-                let steps = min(max(Int((length / spacing).rounded(.up)), 1), maxSubdivisions)
-                for step in 1...steps {
-                    let t = CGFloat(step) / CGFloat(steps)
-                    path.append(PathPoint(
-                        point: step == steps ? p2 : catmullRom(p0, p1, p2, p3, t: t),
-                        age: pts[i].age + (pts[i + 1].age - pts[i].age) * Double(t),
-                        distance: pts[i].distance + (pts[i + 1].distance - pts[i].distance) * Double(t)
-                    ))
-                }
-            }
-        }
-
         if settings.style == .dotted {
             // Dots go on the straight lines between recorded samples rather
             // than the spline: a spline segment changes shape when the next
             // sample arrives, which would nudge dots that are already shown.
             let polyline = pts.map { PathPoint(point: $0.point, age: $0.age, distance: $0.distance) }
             appendDots(along: polyline, settings: settings, into: &segments)
+            // The head dot marks the cursor, unless it would sit on top of
+            // the last laid dot.
+            let period = dotPeriod(settings: settings)
+            let sinceLastDot = head.distance - (head.distance / period).rounded(.down) * period
+            if sinceLastDot > 0, sinceLastDot < period * 0.5 {
+                return
+            }
         } else {
+            // Smooth the stroke into closely spaced points.
+            var path = [PathPoint(point: first.point, age: first.age, distance: first.distance)]
+            if pts.count > 1 {
+                for i in 0..<(pts.count - 1) {
+                    let p1 = pts[i].point
+                    let p2 = pts[i + 1].point
+                    let p0 = i > 0 ? pts[i - 1].point : reflect(p2, about: p1)
+                    let p3 = i + 2 < pts.count ? pts[i + 2].point : reflect(p1, about: p2)
+                    let length = hypot(p2.x - p1.x, p2.y - p1.y)
+                    let steps = min(max(Int((length / spacing).rounded(.up)), 1), maxSubdivisions)
+                    for step in 1...steps {
+                        let t = CGFloat(step) / CGFloat(steps)
+                        path.append(PathPoint(
+                            point: step == steps ? p2 : catmullRom(p0, p1, p2, p3, t: t),
+                            age: pts[i].age + (pts[i + 1].age - pts[i].age) * Double(t),
+                            distance: pts[i].distance + (pts[i + 1].distance - pts[i].distance) * Double(t)
+                        ))
+                    }
+                }
+            }
             for (a, b) in zip(path, path.dropFirst()) {
                 segments.append(TrailSegment(
                     p0: SIMD2(Float(a.point.x), Float(a.point.y)),

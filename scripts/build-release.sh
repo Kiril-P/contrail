@@ -13,7 +13,7 @@ ROOT="$PWD"
 DIST="$ROOT/dist"
 BUILD="$ROOT/build/release"
 
-VERSION="${VERSION:-$(xcodebuild -project Contrail.xcodeproj -scheme Contrail -showBuildSettings -configuration Release 2>/dev/null | awk '/MARKETING_VERSION/ {print $3; exit}')}"
+VERSION="${VERSION:-$(xcodebuild -project Contrail.xcodeproj -scheme Contrail -showBuildSettings -configuration Release -disableAutomaticPackageResolution 2>/dev/null | awk '/MARKETING_VERSION/ {print $3; exit}')}"
 echo "Building Contrail $VERSION"
 
 rm -rf "$BUILD" "$DIST"

@@ -49,8 +49,10 @@ enum SnapshotRenderer {
         exit(ok ? 0 : 1)
     }
 
-    /// Writes the popover and Settings window layouts side by side (the live
-    /// Metal preview isn't captured). For checking layout without a screenshot.
+    /// Writes the popover and each Settings tab side by side (the live Metal
+    /// preview isn't captured). Tabs are shown at full content height rather
+    /// than inside the scrolling 480×600 window, so every control is visible.
+    /// For checking layout without a screenshot.
     static func renderUI(store: SettingsStore, to url: URL) -> Bool {
         let glyphs = HStack(spacing: 0) {
             ForEach([false, true], id: \.self) { dark in
