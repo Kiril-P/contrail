@@ -73,6 +73,11 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     /// The Look these settings were last based on, for "Custom · based on…"
     /// and Reset. Nil for settings that never came from a Look.
     public var baseLookID: String?
+    /// While a mouse button is held and the cursor moves, draw the trail in a
+    /// second color and wider, so drags stand out.
+    public var dragHighlight: Bool
+    /// Preset for the drag color; nil picks a contrasting one automatically.
+    public var dragPresetID: String?
 
     public static let widthRange: ClosedRange<Double> = 2...20
     public static let lengthRange: ClosedRange<Double> = 0.15...1.5
@@ -102,7 +107,9 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         holdModifier: HoldModifier = .none,
         appRules: [AppRule] = [],
         offInGames: Bool = true,
-        baseLookID: String? = Look.defaultID
+        baseLookID: String? = Look.defaultID,
+        dragHighlight: Bool = true,
+        dragPresetID: String? = nil
     ) {
         self.version = Self.currentVersion
         self.isEnabled = isEnabled
@@ -124,6 +131,8 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.appRules = appRules
         self.offInGames = offInGames
         self.baseLookID = baseLookID
+        self.dragHighlight = dragHighlight
+        self.dragPresetID = dragPresetID
     }
 
     /// The same settings with every value forced into its valid range.
@@ -142,6 +151,9 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         }
         copy.clickSize = clickSize.clamped(to: Self.clickSizeRange)
         copy.sparks = sparks.clamped(to: Self.unitRange)
+        if let id = dragPresetID, ColorPreset.preset(id: id) == nil {
+            copy.dragPresetID = nil
+        }
         if ColorPreset.preset(id: rightClickPresetID) == nil {
             copy.rightClickPresetID = TrailSettings.default.rightClickPresetID
         }
@@ -151,6 +163,25 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     /// The preset this configuration refers to.
     public var preset: ColorPreset {
         ColorPreset.preset(id: presetID) ?? ColorPreset.default
+    }
+
+    /// Width multiplier for the stretch of trail drawn while dragging.
+    public static let dragWidthScale = 1.6
+    /// Widest a dragged stretch gets, in points.
+    public static let dragMaxWidth = 24.0
+
+    /// Presets considered warm: the automatic drag color switches to cyan
+    /// for these so the drag still contrasts.
+    static let warmPresetIDs: Set<String> = ["amber", "coral", "sunset", "magenta"]
+
+    /// The color of the trail while dragging: the chosen preset, or amber
+    /// (cyan when the trail itself is warm).
+    public var dragColor: TrailColor {
+        if let id = dragPresetID, let preset = ColorPreset.preset(id: id) {
+            return preset.stops[0]
+        }
+        let autoID = Self.warmPresetIDs.contains(presetID) ? "cyan" : "amber"
+        return ColorPreset.preset(id: autoID)!.stops[0]
     }
 
     /// Ring color for a left click (the trail's head color) or any other click.
@@ -163,7 +194,7 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         case version, isEnabled, presetID, width, length, glow
         case taper, followSpeed, linger, opacity, highContrast
         case clickRipples, clickSize, rightClickPresetID, style, sparks
-        case holdModifier, appRules, offInGames, baseLookID
+        case holdModifier, appRules, offInGames, baseLookID, dragHighlight, dragPresetID
     }
 
     public init(from decoder: Decoder) throws {
@@ -192,6 +223,8 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.appRules = (try? c.decodeIfPresent([Lossy<AppRule>].self, forKey: .appRules))?
             .compactMap(\.value) ?? d.appRules
         self.offInGames = (try? c.decodeIfPresent(Bool.self, forKey: .offInGames)) ?? d.offInGames
+        self.dragHighlight = (try? c.decodeIfPresent(Bool.self, forKey: .dragHighlight)) ?? d.dragHighlight
+        self.dragPresetID = (try? c.decodeIfPresent(String.self, forKey: .dragPresetID)) ?? nil
         // Settings saved before Looks existed have no base Look.
         self.baseLookID = c.contains(.baseLookID)
             ? (try? c.decodeIfPresent(String.self, forKey: .baseLookID)) ?? nil

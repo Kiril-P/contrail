@@ -135,7 +135,10 @@ final class PreviewTrailView: NSView {
         guard bounds.width > 0 else { return }
         let now = CACurrentMediaTime()
         let cursor = cursorPosition(at: now - startTime)
-        engine.update(cursor: cursor, now: now, settings: settings)
+        // With drag highlight on, "hold the button" for part of every loop.
+        let loop = ((now - startTime) * 1.1).truncatingRemainder(dividingBy: 2 * .pi)
+        let dragging = settings.dragHighlight && loop > 3.6 && loop < 5.4
+        engine.update(cursor: cursor, now: now, settings: settings, dragging: dragging)
         let segments = TrailGeometry.segments(for: engine.visiblePoints(length: settings.length), settings: settings)
         particles.update(head: engine.samples.last?.point, dt: now - (lastStep ?? now), settings: settings)
         lastStep = now

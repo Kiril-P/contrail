@@ -36,6 +36,10 @@ final class TrailController {
     /// the links for its ripple; until the cursor actually moves away from
     /// here, the trail isn't fed, so a click alone never leaves a dot.
     private var restingCursor: CGPoint?
+    /// Where the current mouse press started, and whether it has moved far
+    /// enough to count as a drag (so a jittery click never highlights).
+    private var pressPoint: CGPoint?
+    private var pressIsDrag = false
     /// Whether the hold key (if any) was down on the previous model update.
     private var wasHolding = true
 
@@ -142,6 +146,8 @@ final class TrailController {
         let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: clicks, handler: { [weak self] event in
             let flags = event.modifierFlags
+            let pressLocation = event.locationInWindow
+            MainActor.assumeIsolated { self?.pressed(at: pressLocation) }
             let primary = event.type == .leftMouseDown && !flags.contains(.control)
             // For global events there's no window, so this is already in
             // screen coordinates: where the click happened, even if the
@@ -159,6 +165,28 @@ final class TrailController {
     private func moved(flags: NSEvent.ModifierFlags) {
         guard store.settings.holdModifier.isSatisfied(by: flags) else { return }
         wake()
+    }
+
+    private func pressed(at location: CGPoint) {
+        pressPoint = location
+        pressIsDrag = false
+    }
+
+    /// True while a mouse button is held and the cursor has moved at least
+    /// 4 pt from where the press began. `pressedMouseButtons` needs no
+    /// permission.
+    private func isDragging(cursor: CGPoint, settings: TrailSettings) -> Bool {
+        // Presses inside Contrail's own windows aren't seen (global monitor),
+        // so they never start a drag.
+        guard NSEvent.pressedMouseButtons != 0, let start = pressPoint else {
+            pressPoint = nil
+            pressIsDrag = false
+            return false
+        }
+        if !pressIsDrag, hypot(cursor.x - start.x, cursor.y - start.y) >= 4 {
+            pressIsDrag = true
+        }
+        return settings.dragHighlight && pressIsDrag
     }
 
     private func click(at location: CGPoint, primary: Bool, flags: NSEvent.ModifierFlags) {
@@ -229,7 +257,8 @@ final class TrailController {
                 engine.drain(now: now, settings: settings)
             } else {
                 restingCursor = nil
-                engine.update(cursor: cursor, now: now, settings: settings)
+                engine.update(cursor: cursor, now: now, settings: settings,
+                              dragging: isDragging(cursor: cursor, settings: settings))
             }
             let points = engine.visiblePoints(length: settings.length)
             // No head while the hold key is up or on a stroke's first sample,

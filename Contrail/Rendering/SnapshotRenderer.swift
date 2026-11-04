@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Renders a synthetic trail to a PNG without touching the real cursor.
 ///
-///     Contrail.app/Contents/MacOS/Contrail --snapshot out.png [--preset cyan] [--matte] [--width 7] [--opacity 1] [--glow 0.7] [--taper N] [--speed N] [--ripples] [--click-size N] [--style neon|comet|ribbon|dotted|sparks] [--sparks N] [--background light|dark]
+///     Contrail.app/Contents/MacOS/Contrail --snapshot out.png [--preset cyan] [--matte] [--width 7] [--opacity 1] [--glow 0.7] [--taper N] [--speed N] [--ripples] [--drag] [--click-size N] [--style neon|comet|ribbon|dotted|sparks] [--sparks N] [--background light|dark]
 ///     Contrail.app/Contents/MacOS/Contrail --snapshot-presets out.png
 ///     Contrail.app/Contents/MacOS/Contrail --snapshot-styles out.png
 ///     Contrail.app/Contents/MacOS/Contrail --snapshot-ui out.png
@@ -44,6 +44,7 @@ enum SnapshotRenderer {
         }
         if let amount = number("--sparks") { settings.sparks = amount }
         sampleRipples = args.contains("--ripples")
+        sampleDrag = args.contains("--drag")
         let speed = number("--speed")
         let ok = render(settings: settings.clamped(), background: background, speed: speed, to: output)
         exit(ok ? 0 : 1)
@@ -136,7 +137,8 @@ enum SnapshotRenderer {
             let t = Double(i) / Double(frames)
             let x = size.width * (0.12 + 0.76 * t)
             let y = size.height * (0.5 + 0.28 * sin(t * .pi * 2.2))
-            engine.update(cursor: CGPoint(x: x, y: y), now: t * 0.6, settings: flick)
+            engine.update(cursor: CGPoint(x: x, y: y), now: t * 0.6, settings: flick,
+                          dragging: sampleDrag && t > 0.4 && t < 0.8)
             particles.update(head: engine.samples.last?.point, dt: 0.6 / Double(frames), settings: settings)
         }
         return TrailFrame(
@@ -205,6 +207,8 @@ enum SnapshotRenderer {
     /// for a transparent image.
     /// Set by `--ripples`: also draw three click rings at different ages.
     private static var sampleRipples = false
+    /// Set by `--drag`: the middle of the sample flick is drawn as a drag.
+    private static var sampleDrag = false
 
     static func renderImage(settings: TrailSettings, background: String?, size: CGSize, speed: Double? = nil) -> CGImage? {
         guard let renderer = TrailRenderer.shared else { return nil }

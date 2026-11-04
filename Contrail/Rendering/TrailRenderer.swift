@@ -3,7 +3,7 @@ import Metal
 import QuartzCore
 import simd
 
-/// Matches `Uniforms` in `TrailShader` (112 bytes).
+/// Matches `Uniforms` in `TrailShader` (128 bytes).
 struct TrailUniforms {
     var viewSize: SIMD2<Float>
     var origin: SIMD2<Float>
@@ -19,6 +19,7 @@ struct TrailUniforms {
     var stop1: SIMD4<Float>
     var stop2: SIMD4<Float>
     var stop3: SIMD4<Float>
+    var dragColor: SIMD4<Float>
 
     init(viewSize: CGSize, origin: CGPoint, scale: CGFloat, settings: TrailSettings) {
         self.viewSize = SIMD2(Float(viewSize.width), Float(viewSize.height))
@@ -35,6 +36,7 @@ struct TrailUniforms {
         self.stop1 = stops.count > 1 ? stops[1] : stops[0]
         self.stop2 = stops.count > 2 ? stops[2] : stops[0]
         self.stop3 = stops.count > 3 ? stops[3] : stops[0]
+        self.dragColor = settings.dragColor.simd
     }
 }
 

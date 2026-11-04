@@ -13,6 +13,8 @@ public struct TrailSample: Equatable, Sendable {
     /// when the sample is recorded, so patterns along the path (dots, ribbon
     /// twists) stay put instead of sliding as the tail retracts.
     public var distance: Double = 0
+    /// Recorded while a mouse button was held and the cursor was dragging.
+    public var dragging: Bool = false
 }
 
 /// A point on the visible part of the trail.
@@ -23,12 +25,16 @@ public struct TrailPoint: Equatable, Sendable {
     public var startsStroke: Bool
     /// Distance along the stroke from its start, in points.
     public var distance: Double
+    /// 1 where the trail was drawn while dragging, 0 elsewhere, blended
+    /// between samples.
+    public var drag: Double
 
-    public init(point: CGPoint, age: Double, startsStroke: Bool, distance: Double = 0) {
+    public init(point: CGPoint, age: Double, startsStroke: Bool, distance: Double = 0, drag: Double = 0) {
         self.point = point
         self.age = age
         self.startsStroke = startsStroke
         self.distance = distance
+        self.drag = drag
     }
 }
 
@@ -86,7 +92,7 @@ public struct TrailEngine: Sendable {
 
     /// Feeds the current cursor position. Call once per display frame while the
     /// trail is active. `now` is a monotonic time in seconds.
-    public mutating func update(cursor raw: CGPoint, now: Double, settings: TrailSettings) {
+    public mutating func update(cursor raw: CGPoint, now: Double, settings: TrailSettings, dragging: Bool = false) {
         let dt = lastRealTime.map { min(max(now - $0, 0), Self.maxStep) } ?? 0
         lastRealTime = now
 
@@ -128,7 +134,7 @@ public struct TrailEngine: Sendable {
             } else {
                 distance = 0
             }
-            samples.append(TrailSample(point: smoothed, time: clock, startsStroke: startsStroke, distance: distance))
+            samples.append(TrailSample(point: smoothed, time: clock, startsStroke: startsStroke, distance: distance, dragging: dragging))
             pendingBreak = false
             lastAppended = smoothed
         }
@@ -191,13 +197,17 @@ public struct TrailEngine: Sendable {
                             y: sample.point.y + (next.point.y - sample.point.y) * f
                         )
                         let d = sample.distance + (next.distance - sample.distance) * Double(f)
-                        points.append(TrailPoint(point: p, age: 1, startsStroke: true, distance: d))
+                        let drag = (sample.dragging ? 1.0 : 0) + ((next.dragging ? 1.0 : 0) - (sample.dragging ? 1.0 : 0)) * Double(f)
+                        points.append(TrailPoint(point: p, age: 1, startsStroke: true, distance: d, drag: drag))
                     }
                 }
                 continue
             }
             let age = min(max((clock - sample.time) / length, 0), 1)
-            points.append(TrailPoint(point: sample.point, age: age, startsStroke: sample.startsStroke || points.isEmpty, distance: sample.distance))
+            points.append(TrailPoint(
+                point: sample.point, age: age, startsStroke: sample.startsStroke || points.isEmpty,
+                distance: sample.distance, drag: sample.dragging ? 1 : 0
+            ))
         }
         return points
     }
