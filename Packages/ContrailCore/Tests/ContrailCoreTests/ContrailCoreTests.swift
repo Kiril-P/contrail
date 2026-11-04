@@ -482,8 +482,10 @@ import Testing
             now += 1 / 120
         }
         #expect(engine.isEmpty)
+        #expect(engine.isAwaitingStroke)
         engine.update(cursor: CGPoint(x: 500, y: 0), now: now, settings: s)
         #expect(engine.samples.first?.startsStroke == true)
+        #expect(!engine.isAwaitingStroke)
     }
 
     @Test func rulesRoundTrip() throws {

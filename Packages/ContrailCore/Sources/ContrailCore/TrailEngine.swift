@@ -69,6 +69,11 @@ public struct TrailEngine: Sendable {
     /// True when nothing is visible.
     public var isEmpty: Bool { samples.isEmpty }
 
+    /// True when the next recorded position will start a new stroke: after a
+    /// reset, once the trail has fully drained, or while it drains with the
+    /// hold key up. A still cursor fed now would become a lone dot.
+    public var isAwaitingStroke: Bool { pendingBreak }
+
     public mutating func reset() {
         samples.removeAll(keepingCapacity: true)
         filter.reset()

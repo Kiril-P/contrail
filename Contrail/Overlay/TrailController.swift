@@ -36,6 +36,8 @@ final class TrailController {
     /// the links for its ripple; until the cursor actually moves away from
     /// here, the trail isn't fed, so a click alone never leaves a dot.
     private var restingCursor: CGPoint?
+    /// Whether the hold key (if any) was down on the previous model update.
+    private var wasHolding = true
 
     init(store: SettingsStore, activation: ActivationController) {
         self.store = store
@@ -163,9 +165,9 @@ final class TrailController {
         let settings = store.settings
         guard activation.isOn, settings.clickRipples, settings.holdModifier.isSatisfied(by: flags) else { return }
         ripples.add(at: location, time: CACurrentMediaTime(), color: settings.rippleColor(primary: primary))
-        // The cursor may have moved while the trail slept (hold key up, or
-        // trail off); a click alone shouldn't start a trail where it is now.
-        if engine.isEmpty {
+        // The cursor may have moved while the trail slept or drained (hold
+        // key up, or trail off); a click alone shouldn't start a trail here.
+        if engine.isAwaitingStroke {
             restingCursor = NSEvent.mouseLocation
         }
         wake()
@@ -210,9 +212,15 @@ final class TrailController {
             // enable, screen change), don't start a trail until the cursor
             // actually moves; a click alone only shows its ripple.
             let holding = settings.holdModifier.isSatisfied(by: NSEvent.modifierFlags)
+            if holding && !wasHolding {
+                // Pressing the hold key starts a trail only once the cursor
+                // moves, even if the old one is still draining.
+                restingCursor = cursor
+            }
+            wasHolding = holding
             if !holding {
                 engine.drain(now: now, settings: settings)
-            } else if !(engine.isEmpty && cursor == restingCursor) {
+            } else if !(engine.isAwaitingStroke && cursor == restingCursor) {
                 restingCursor = nil
                 engine.update(cursor: cursor, now: now, settings: settings)
             }
