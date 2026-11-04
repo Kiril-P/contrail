@@ -84,7 +84,8 @@ import Testing
     @Test func taperNarrowsTowardTail() {
         let s = TrailSettings(width: 10, taper: 1)
         #expect(TrailGeometry.radius(age: 0, settings: s) == 5)
-        #expect(TrailGeometry.radius(age: 1, settings: s) < 0.5)
+        #expect(TrailGeometry.radius(age: 1, settings: s) <= 0.25)
+        #expect(TrailGeometry.radius(age: 0.5, settings: s) > TrailGeometry.radius(age: 0.9, settings: s))
         let uniform = TrailSettings(width: 10, taper: 0)
         #expect(TrailGeometry.radius(age: 1, settings: uniform) == 5)
     }
@@ -126,13 +127,13 @@ import Testing
     }
 
     @Test func roundTrips() throws {
-        let s = TrailSettings(presetID: "ember", width: 11, highContrast: true)
+        let s = TrailSettings(presetID: "sunset", width: 11, highContrast: true)
         let data = try JSONEncoder().encode(s)
         #expect(try JSONDecoder().decode(TrailSettings.self, from: data) == s)
     }
 
     @Test func gradientInterpolates() {
-        let preset = ColorPreset(id: "t", name: "T", stops: [RGBColor(red: 0, green: 0, blue: 0), RGBColor(red: 1, green: 1, blue: 1)])
+        let preset = ColorPreset(id: "t", name: "T", stops: [TrailColor(red: 0, green: 0, blue: 0), TrailColor(red: 1, green: 1, blue: 1)])
         #expect(preset.color(at: 0.5).red == 0.5)
         #expect(preset.color(at: 2).red == 1)
     }

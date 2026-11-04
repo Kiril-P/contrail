@@ -56,11 +56,14 @@ public enum TrailGeometry {
         return segments
     }
 
-    /// Half width of the trail core at a given age.
+    /// Half width of the trail core at a given age. The body stays full for
+    /// most of its length and narrows to a hairline at the very end.
     public static func radius(age: Double, settings: TrailSettings) -> Float {
         let taper = min(max(settings.taper, 0), 1)
-        let factor = 1 - taper * pow(min(max(age, 0), 1), 0.9)
-        return Float(max(settings.width * 0.5 * factor, 0.15))
+        let exponent = 1.3 * taper
+        let remaining = 1 - min(max(age, 0), 1)
+        let factor = exponent > 0 ? max(0.05, pow(remaining, exponent)) : 1
+        return Float(max(settings.width * 0.5 * factor, 0.1))
     }
 
     private static func appendStroke(_ stroke: ArraySlice<TrailPoint>, settings: TrailSettings, into segments: inout [TrailSegment]) {
