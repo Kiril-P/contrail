@@ -40,12 +40,9 @@ struct MenuPopover: View {
 
             HStack(spacing: 4) {
                 QuickToggle(
-                    title: "Click ripples", systemImage: "dot.circle.and.hand.point.up.left.fill",
-                    help: "Show a ring wherever you click", isOn: settings.clickRipples
-                )
-                QuickToggle(
-                    title: "Drag highlight", systemImage: "hand.draw.fill",
-                    help: "Highlight the trail while you hold a mouse button and drag", isOn: settings.dragHighlight
+                    title: "Clicks & drags", systemImage: "dot.circle.and.hand.point.up.left.fill",
+                    help: "A ring when you press that follows your drag and ripples out on release",
+                    isOn: settings.pressEffects
                 )
                 QuickToggle(
                     title: "High contrast", systemImage: "circle.lefthalf.filled",

@@ -117,7 +117,7 @@ public enum TrailGeometry {
     /// Radius at a path point, widened where the trail was dragged.
     private static func radius(at p: PathPoint, settings: TrailSettings) -> Float {
         let base = radius(age: p.age, distance: p.distance, settings: settings)
-        guard p.drag > 0, settings.dragHighlight else { return base }
+        guard p.drag > 0, settings.pressEffects else { return base }
         let scale = dragScale(fullRadius: fullRadius(settings: settings))
         return base * Float(1 + (scale - 1) * p.drag)
     }
@@ -126,7 +126,7 @@ public enum TrailGeometry {
     /// widths, so the two colors' halos don't meet head-on (with MAX
     /// blending that would flash a pale blob at each end of a drag).
     private static func smoothDrag(_ path: [PathPoint], settings: TrailSettings) -> [PathPoint] {
-        guard settings.dragHighlight, path.contains(where: { $0.drag > 0 }) else { return path }
+        guard settings.pressEffects, path.contains(where: { $0.drag > 0 }) else { return path }
         let half = max(settings.width * 2, 8)
         var result = path
         var lo = 0
@@ -148,7 +148,7 @@ public enum TrailGeometry {
     }
 
     private static func dragWeight(_ p: PathPoint, settings: TrailSettings) -> Float {
-        settings.dragHighlight ? Float(p.drag) : 0
+        settings.pressEffects ? Float(p.drag) : 0
     }
 
     private static func appendStroke(_ stroke: ArraySlice<TrailPoint>, settings: TrailSettings, into segments: inout [TrailSegment]) {
@@ -221,7 +221,7 @@ public enum TrailGeometry {
         var r = radius(at: headPoint, settings: settings)
         if settings.style == .comet {
             let headRadius = settings.width * 0.7
-            let scale = settings.dragHighlight ? dragScale(fullRadius: headRadius) : 1
+            let scale = settings.pressEffects ? dragScale(fullRadius: headRadius) : 1
             r = Float(headRadius * (1 + (scale - 1) * headDrag))
         }
         let u = Float(head.age)

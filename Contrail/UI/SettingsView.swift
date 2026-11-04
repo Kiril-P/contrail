@@ -66,21 +66,17 @@ struct AppearanceSettings: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Clicks and drags") {
-                Toggle(isOn: settings.clickRipples) {
-                    Text("Click ripples")
-                    Text("Show an expanding ring wherever you click. Left clicks use the trail color.")
+            Section("Clicks & drags") {
+                Toggle(isOn: settings.pressEffects) {
+                    Text("Clicks & drags")
+                    Text("A ring appears when you press. Hold and drag, and it follows the cursor while the trail takes the drag color; let go and it ripples out.")
                 }
-                SliderRow(title: "Size", value: settings.clickSize, range: TrailSettings.clickSizeRange, step: 1, format: Formats.points)
-                    .disabled(!store.settings.clickRipples)
+                SliderRow(title: "Ring size", value: settings.clickSize, range: TrailSettings.clickSizeRange, step: 1, format: Formats.points)
+                    .disabled(!store.settings.pressEffects)
                 LabeledContent("Right click") {
                     PresetPicker(selection: settings.rightClickPresetID, size: 22, spacing: 8)
                 }
-                .disabled(!store.settings.clickRipples)
-                Toggle(isOn: settings.dragHighlight) {
-                    Text("Drag highlight")
-                    Text("While you hold a mouse button and drag, the trail turns a second color and gets wider.")
-                }
+                .disabled(!store.settings.pressEffects)
                 Picker("Drag color", selection: settings.dragPresetID) {
                     Text("Automatic").tag(String?.none)
                     Divider()
@@ -88,7 +84,7 @@ struct AppearanceSettings: View {
                         Text(preset.name).tag(Optional(preset.id))
                     }
                 }
-                .disabled(!store.settings.dragHighlight)
+                .disabled(!store.settings.pressEffects)
             }
 
             Section("Motion") {

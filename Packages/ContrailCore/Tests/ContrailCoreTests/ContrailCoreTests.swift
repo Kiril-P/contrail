@@ -188,6 +188,84 @@ import Testing
         #expect(system.count == RippleSystem.maxCount)
     }
 
+    @Test func pressHoldRelease() {
+        var system = RippleSystem()
+        let amber = TrailColor(hex: 0xFFB52E)
+        system.press(at: .zero, time: 0, color: cyan)
+        #expect(system.isHolding && !system.isEmpty)
+        // Held: follows the cursor and stays alive indefinitely.
+        system.move(to: CGPoint(x: 50, y: 0), time: 5, dragColor: nil)
+        system.prune(now: 5)
+        let held = system.instances(now: 5, size: 56)
+        #expect(held.count == 1 && held[0].center.x == 50)
+        // Becoming a drag shifts the ring to the drag color.
+        system.move(to: CGPoint(x: 60, y: 0), time: 5, dragColor: amber)
+        #expect(system.instances(now: 5.5, size: 56)[0].color == amber.simd)
+        // Release ripples out from the ring's size, then expires.
+        system.release(at: CGPoint(x: 70, y: 0), time: 6)
+        #expect(!system.isHolding)
+        let out = system.instances(now: 6.01, size: 56)[0]
+        #expect(out.center.x == 70 && out.color == amber.simd)
+        #expect(out.radius >= held[0].radius * 0.9)
+        system.prune(now: 6 + RippleSystem.duration)
+        #expect(system.isEmpty)
+    }
+
+    @Test func releaseContinuesFromTheHeldRing() {
+        // A long hold and a 20 ms click (ring still fading in).
+        for (reduceMotion, at) in [(false, 0.3), (true, 0.3), (false, 0.02)] {
+            var system = RippleSystem()
+            system.press(at: .zero, time: 0, color: cyan)
+            let held = system.instances(now: at, size: 56, reduceMotion: reduceMotion)[0]
+            system.release(at: nil, time: at, reduceMotion: reduceMotion)
+            let out = system.instances(now: at, size: 56, reduceMotion: reduceMotion)[0]
+            #expect(abs(out.radius - held.radius) < 0.01, "reduceMotion \(reduceMotion) at \(at)")
+            #expect(abs(out.fill - held.fill) < 0.01)
+            #expect(abs(out.alpha - held.alpha) < 0.01)
+        }
+    }
+
+    @Test func aStillHeldRingSettles() {
+        var system = RippleSystem()
+        system.press(at: .zero, time: 0, color: cyan)
+        #expect(!system.isSettled(now: 0.5))
+        #expect(system.isSettled(now: 1.5))
+        let a = system.instances(now: 2.0, size: 56)[0].radius
+        let b = system.instances(now: 2.3, size: 56)[0].radius
+        #expect(a == b)                                  // no breathing once settled
+        system.move(to: CGPoint(x: 10, y: 0), time: 2.5, dragColor: nil)
+        #expect(!system.isSettled(now: 2.6))
+    }
+
+    @Test func aSlowDragKeepsTheRingAwake() {
+        var system = RippleSystem()
+        system.press(at: .zero, time: 0, color: cyan)
+        // 0.3 pt per frame at 120 Hz for 2 s.
+        for frame in 1...240 {
+            system.move(to: CGPoint(x: Double(frame) * 0.3, y: 0), time: Double(frame) / 120, dragColor: nil)
+        }
+        #expect(!system.isSettled(now: 2.0))
+    }
+
+    @Test func quickClickLooksLikeARipple() {
+        var system = RippleSystem()
+        system.press(at: .zero, time: 0, color: cyan)
+        system.release(at: nil, time: 0.08)
+        let a = system.instances(now: 0.1, size: 56)[0]
+        let b = system.instances(now: 0.4, size: 56)[0]
+        #expect(a.radius < b.radius && a.alpha > b.alpha && b.radius <= 28)
+    }
+
+    @Test func legacyClickAndDragSettingsMigrate() throws {
+        func decode(_ json: String) throws -> TrailSettings {
+            try JSONDecoder().decode(TrailSettings.self, from: json.data(using: .utf8)!)
+        }
+        #expect(try decode(#"{"clickRipples": true, "dragHighlight": false}"#).pressEffects)
+        #expect(try decode(#"{"clickRipples": false}"#).pressEffects)   // drag was on by default
+        #expect(try !decode(#"{"clickRipples": false, "dragHighlight": false}"#).pressEffects)
+        #expect(try !decode(#"{"pressEffects": false, "clickRipples": true}"#).pressEffects)
+    }
+
     @Test func rippleLayoutMatchesShader() {
         #expect(MemoryLayout<RippleInstance>.stride == 48)
         #expect(MemoryLayout<RippleInstance>.offset(of: \RippleInstance.color) == 32)
@@ -522,7 +600,7 @@ import Testing
 
     @Test func turningItOffDrawsNoHighlight() {
         var s = TrailSettings(width: 8, taper: 0, followSpeed: 1)
-        s.dragHighlight = false
+        s.pressEffects = false
         #expect(dragged(s, draggingFrom: 0).allSatisfy { $0.d0 == 0 && $0.r0 == 4 })
     }
 
@@ -586,7 +664,7 @@ import Testing
 
     @Test func dragSettingsDecodeWithDefaults() throws {
         let s = try JSONDecoder().decode(TrailSettings.self, from: #"{"dragPresetID": "nope"}"#.data(using: .utf8)!)
-        #expect(s.dragHighlight)
+        #expect(s.pressEffects)
         #expect(s.clamped().dragPresetID == nil)
     }
 }
@@ -601,11 +679,11 @@ import Testing
             for size in LookSize.allCases {
                 var s = TrailSettings()
                 s.highContrast = true
-                s.clickRipples = true
+                s.pressEffects = true
                 look.apply(to: &s, size: size)
                 #expect(LookSelection(s) == .look(look, size), "\(look.id) \(size)")
                 // Looks leave toggles alone.
-                #expect(s.highContrast && s.clickRipples)
+                #expect(s.highContrast && s.pressEffects)
             }
         }
     }

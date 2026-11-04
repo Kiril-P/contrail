@@ -54,8 +54,10 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     public var opacity: Double
     /// Opaque matte stroke with a dark outline, readable on white backgrounds.
     public var highContrast: Bool
-    /// Show an expanding ring wherever the user clicks.
-    public var clickRipples: Bool
+    /// Clicks & drags: a ring at every press that follows the cursor while
+    /// the button is held and ripples out on release; while dragging, the
+    /// trail also takes the drag color and widens.
+    public var pressEffects: Bool
     /// Final ring diameter, in points.
     public var clickSize: Double
     /// Preset whose head color is used for right and middle clicks. Left
@@ -73,9 +75,6 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     /// The Look these settings were last based on, for "Custom · based on…"
     /// and Reset. Nil for settings that never came from a Look.
     public var baseLookID: String?
-    /// While a mouse button is held and the cursor moves, draw the trail in a
-    /// second color and wider, so drags stand out.
-    public var dragHighlight: Bool
     /// Preset for the drag color; nil picks a contrasting one automatically.
     public var dragPresetID: String?
 
@@ -99,7 +98,7 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         linger: Double = 0,
         opacity: Double = 1,
         highContrast: Bool = false,
-        clickRipples: Bool = false,
+        pressEffects: Bool = true,
         clickSize: Double = 56,
         rightClickPresetID: String = "magenta",
         style: TrailStyle = .neon,
@@ -108,7 +107,6 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         appRules: [AppRule] = [],
         offInGames: Bool = true,
         baseLookID: String? = Look.defaultID,
-        dragHighlight: Bool = true,
         dragPresetID: String? = nil
     ) {
         self.version = Self.currentVersion
@@ -122,7 +120,7 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.linger = linger
         self.opacity = opacity
         self.highContrast = highContrast
-        self.clickRipples = clickRipples
+        self.pressEffects = pressEffects
         self.clickSize = clickSize
         self.rightClickPresetID = rightClickPresetID
         self.style = style
@@ -131,7 +129,6 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.appRules = appRules
         self.offInGames = offInGames
         self.baseLookID = baseLookID
-        self.dragHighlight = dragHighlight
         self.dragPresetID = dragPresetID
     }
 
@@ -193,8 +190,13 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case version, isEnabled, presetID, width, length, glow
         case taper, followSpeed, linger, opacity, highContrast
-        case clickRipples, clickSize, rightClickPresetID, style, sparks
-        case holdModifier, appRules, offInGames, baseLookID, dragHighlight, dragPresetID
+        case pressEffects, clickSize, rightClickPresetID, style, sparks
+        case holdModifier, appRules, offInGames, baseLookID, dragPresetID
+    }
+
+    /// Keys from 0.3–0.4, read once to migrate into `pressEffects`.
+    private enum LegacyKeys: String, CodingKey {
+        case clickRipples, dragHighlight
     }
 
     public init(from decoder: Decoder) throws {
@@ -211,7 +213,16 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.linger = (try? c.decodeIfPresent(Double.self, forKey: .linger)) ?? d.linger
         self.opacity = (try? c.decodeIfPresent(Double.self, forKey: .opacity)) ?? d.opacity
         self.highContrast = (try? c.decodeIfPresent(Bool.self, forKey: .highContrast)) ?? d.highContrast
-        self.clickRipples = (try? c.decodeIfPresent(Bool.self, forKey: .clickRipples)) ?? d.clickRipples
+        if let value = try? c.decodeIfPresent(Bool.self, forKey: .pressEffects) {
+            self.pressEffects = value
+        } else {
+            // Before 0.5, click ripples (default off) and drag highlight
+            // (default on) were separate; either one on means on.
+            let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+            let ripples = (try? legacy.decodeIfPresent(Bool.self, forKey: .clickRipples)) ?? false
+            let drag = (try? legacy.decodeIfPresent(Bool.self, forKey: .dragHighlight)) ?? true
+            self.pressEffects = ripples || drag
+        }
         self.clickSize = (try? c.decodeIfPresent(Double.self, forKey: .clickSize)) ?? d.clickSize
         self.rightClickPresetID = (try? c.decodeIfPresent(String.self, forKey: .rightClickPresetID)) ?? d.rightClickPresetID
         // An unknown style (from a newer version) falls back to Neon.
@@ -223,7 +234,6 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.appRules = (try? c.decodeIfPresent([Lossy<AppRule>].self, forKey: .appRules))?
             .compactMap(\.value) ?? d.appRules
         self.offInGames = (try? c.decodeIfPresent(Bool.self, forKey: .offInGames)) ?? d.offInGames
-        self.dragHighlight = (try? c.decodeIfPresent(Bool.self, forKey: .dragHighlight)) ?? d.dragHighlight
         self.dragPresetID = (try? c.decodeIfPresent(String.self, forKey: .dragPresetID)) ?? nil
         // Settings saved before Looks existed have no base Look.
         self.baseLookID = c.contains(.baseLookID)

@@ -217,7 +217,20 @@ enum SnapshotRenderer {
         let scale: CGFloat = 2
         var frame = speed.map { TrailFrame(segments: slowTrail(size: size, settings: settings, speed: $0)) }
             ?? sampleFrame(size: size, settings: settings, keepLength: keepLength)
-        if sampleRipples {
+        if sampleRipples && sampleDrag {
+            // The whole gesture: a quick click early in the flick, and the
+            // ring released where the drag (t 0.4…0.8) ended, in the drag color.
+            func point(_ t: Double) -> CGPoint {
+                CGPoint(x: size.width * (0.12 + 0.76 * t), y: size.height * (0.5 + 0.28 * sin(t * .pi * 2.2)))
+            }
+            var system = RippleSystem()
+            let now = 10.0
+            system.add(at: point(0.22), time: now - 0.3 * RippleSystem.duration, color: settings.rippleColor(primary: true))
+            system.press(at: point(0.8), time: now - 1, color: settings.rippleColor(primary: true))
+            system.move(to: point(0.8), time: now - 0.9, dragColor: settings.dragColor)
+            system.release(at: point(0.8), time: now - 0.25 * RippleSystem.duration)
+            frame.ripples = system.instances(now: now, size: settings.clickSize)
+        } else if sampleRipples {
             var system = RippleSystem()
             let now = 10.0
             let samples: [(x: Double, age: Double, primary: Bool)] = [(0.25, 0.12, true), (0.5, 0.35, true), (0.75, 0.6, false)]
