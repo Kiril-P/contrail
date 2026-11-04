@@ -1,0 +1,10 @@
+.DS_Store
+build/
+dist/
+DerivedData/
+.build/
+.swiftpm/
+xcuserdata/
+*.xcuserstate
+Packages/ContrailCore/.build/
+Packages/ContrailCore/Package.resolved
