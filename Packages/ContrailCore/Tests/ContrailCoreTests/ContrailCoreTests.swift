@@ -528,7 +528,50 @@ import Testing
 
     @Test func dragWidthIsCapped() {
         let s = TrailSettings(width: 20, taper: 0, followSpeed: 1)
-        #expect(dragged(s, draggingFrom: 0).allSatisfy { $0.r0 <= Float(TrailSettings.dragMaxWidth / 2) })
+        #expect(dragged(s, draggingFrom: 0).allSatisfy { $0.r0 <= Float(TrailSettings.dragMaxWidth / 2) + 0.001 })
+        // A ribbon this wide is already past the cap, so dragging doesn't
+        // widen it at all (it still changes color).
+        var ribbon = s
+        ribbon.style = .ribbon
+        let plain = dragged(ribbon, draggingFrom: 1000).map(\.r0)
+        let drag = dragged(ribbon, draggingFrom: 0).map(\.r0)
+        #expect(plain == drag)
+    }
+
+    @Test func cometHeadWidensWhenDragging() {
+        var s = TrailSettings(width: 8, followSpeed: 1)
+        s.style = .comet
+        let still = dragged(s, draggingFrom: 1000).last!.r0
+        let drag = dragged(s, draggingFrom: 0).last!.r0
+        #expect(drag > still)
+        #expect(drag <= Float(TrailSettings.dragMaxWidth / 2) + 0.001)
+    }
+
+    /// At drag start the head only has earlier points to average with, so
+    /// it reaches the drag color over a few frames. Bound how long that takes.
+    @Test func headTurnsToTheDragColorQuickly() {
+        let s = TrailSettings(width: 8, taper: 0, followSpeed: 1)
+        var engine = TrailEngine()
+        var weights: [Float] = []
+        for frame in 0..<30 {
+            engine.update(cursor: CGPoint(x: Double(frame) * 5, y: 0), now: Double(frame) / 120,
+                          settings: s, dragging: frame >= 20)
+            if frame >= 20 {
+                let segments = TrailGeometry.segments(for: engine.visiblePoints(length: s.length), settings: s)
+                weights.append(segments.last!.d0)
+            }
+        }
+        #expect(weights[0] > 0.2)          // visible on the first dragged frame
+        #expect(weights[3] > 0.9)          // essentially full within ~20 pt
+        #expect(zip(weights, weights.dropFirst()).allSatisfy { $0 <= $1 + 0.001 })
+    }
+
+    @Test func dragColorFadesInAlongTheTrail() {
+        let s = TrailSettings(width: 8, taper: 0, followSpeed: 1)
+        let weights = dragged(s, draggingFrom: 20).map(\.d0)
+        // Somewhere between plain and dragged there are in-between weights.
+        #expect(weights.contains { $0 > 0.05 && $0 < 0.95 })
+        #expect(weights.first == 0 && weights.last == 1)
     }
 
     @Test func automaticDragColorContrastsWithTheTrail() {
@@ -595,6 +638,35 @@ import Testing
         Look.look(id: "sparkler")!.apply(to: &s, size: .medium)
         s.sparks = 0.1
         #expect(LookSelection(s).look == nil)
+    }
+
+    @Test func baseLookFollowsWhateverLookIsMatched() {
+        var s = TrailSettings()
+        Look.look(id: "neon")!.apply(to: &s, size: .medium)
+        // Tweak by hand until the values are exactly Whisper's.
+        let whisper = Look.look(id: "whisper")!
+        s.presetID = whisper.presetID; s.width = whisper.width; s.length = whisper.length
+        s.glow = whisper.glow; s.taper = whisper.taper; s.followSpeed = whisper.followSpeed
+        s.opacity = whisper.opacity
+        s = s.reconcilingBaseLook()
+        #expect(s.baseLookID == "whisper")
+        s.glow = 0.9
+        #expect(LookSelection(s.reconcilingBaseLook()) == .custom(base: whisper))
+    }
+
+    @Test func customKeepsItsSizeForReset() {
+        var s = TrailSettings()
+        let neon = Look.look(id: "neon")!
+        neon.apply(to: &s, size: .large)
+        s.glow = 0.2
+        #expect(s.lookSize == .large)
+        neon.apply(to: &s, size: s.lookSize)
+        #expect(LookSelection(s) == .look(neon, .large))
+    }
+
+    @Test func migratedDefaultsGainTheirBaseLook() throws {
+        let s = try JSONDecoder().decode(TrailSettings.self, from: "{}".data(using: .utf8)!)
+        #expect(s.reconcilingBaseLook().baseLookID == "neon")
     }
 
     @Test func oldSettingsDecodeWithoutABaseLook() throws {

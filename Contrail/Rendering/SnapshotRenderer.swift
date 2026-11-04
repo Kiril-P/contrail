@@ -127,11 +127,13 @@ enum SnapshotRenderer {
         sampleFrame(size: size, settings: settings).segments
     }
 
-    static func sampleFrame(size: CGSize, settings: TrailSettings) -> TrailFrame {
+    /// `keepLength` samples with the settings' own trail length (Look
+    /// thumbnails); otherwise a fixed 0.6 s so every image shows the full S.
+    static func sampleFrame(size: CGSize, settings: TrailSettings, keepLength: Bool = false) -> TrailFrame {
         var engine = TrailEngine()
         var particles = ParticleSystem()
         var flick = settings
-        flick.length = 0.6
+        if !keepLength { flick.length = 0.6 }
         let frames = 54
         for i in 0...frames {
             let t = Double(i) / Double(frames)
@@ -210,11 +212,11 @@ enum SnapshotRenderer {
     /// Set by `--drag`: the middle of the sample flick is drawn as a drag.
     private static var sampleDrag = false
 
-    static func renderImage(settings: TrailSettings, background: String?, size: CGSize, speed: Double? = nil) -> CGImage? {
+    static func renderImage(settings: TrailSettings, background: String?, size: CGSize, speed: Double? = nil, keepLength: Bool = false) -> CGImage? {
         guard let renderer = TrailRenderer.shared else { return nil }
         let scale: CGFloat = 2
         var frame = speed.map { TrailFrame(segments: slowTrail(size: size, settings: settings, speed: $0)) }
-            ?? sampleFrame(size: size, settings: settings)
+            ?? sampleFrame(size: size, settings: settings, keepLength: keepLength)
         if sampleRipples {
             var system = RippleSystem()
             let now = 10.0

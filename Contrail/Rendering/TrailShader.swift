@@ -145,8 +145,12 @@ enum TrailShader {
         float r = mix(in.ru.x, in.ru.y, dh.y);
         float age = clamp(mix(in.ru.z, in.ru.w, dh.y), 0.0, 1.0);
         float aa = u.pixel;
-        // Stretches drawn while dragging take the drag color.
-        float3 base = mix(gradientColor(age, u), u.dragColor.rgb, mix(in.drag.x, in.drag.y, dh.y));
+        // Stretches drawn while dragging take the drag color. The blend runs
+        // in linear light (brighter midpoints than sRGB); for complementary
+        // colors it still passes near grey, which is why the geometry spreads
+        // the transition over several widths so that patch stays short.
+        float dragMix = mix(in.drag.x, in.drag.y, dh.y);
+        float3 base = pow(mix(pow(gradientColor(age, u), 2.2), pow(u.dragColor.rgb, 2.2), dragMix), 1.0 / 2.2);
 
         if (u.highContrast > 0.5) {
             // Matte: an opaque body in a darkened hue, a 1 pt rim in the same

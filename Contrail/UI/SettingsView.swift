@@ -32,7 +32,7 @@ struct AppearanceSettings: View {
     var body: some View {
         Form {
             Section("Look") {
-                LooksPicker(store: store, columns: 3)
+                LooksPicker(store: store, columns: 3, livePreview: false)
             }
 
             Section {
