@@ -10,6 +10,8 @@ Contrail draws a smooth, tapered neon trail behind the mouse pointer across ever
 
 ![The nine color presets](docs/presets.png)
 
+![Neon, Comet, Ribbon, Dotted and Sparks styles](docs/styles.png)
+
 ## Install
 
 1. Download the latest `Contrail-x.y.z.dmg` from [Releases](https://github.com/Kiril-P/contrail/releases) and drag **Contrail** into **Applications**.
@@ -29,6 +31,7 @@ Click the Contrail icon in the menu bar. The popover has everything you need dur
 - **Nine colors**: Cyan, Violet, Magenta, Coral, Amber, Lime, Ice, and the Sunset and Aurora gradients
 - **Width**, **Length** (how many seconds of motion the trail shows) and **Glow**
 - **High contrast**: a solid, outlined trail that stays readable on white documents and web pages
+- **Style**: Neon, Comet, Ribbon, Dotted or Sparks, with a Sparks amount for the two particle styles
 - **Click ripples**: an expanding ring wherever you click (trail color for left clicks, a second color for right clicks), great for screen recordings
 
 ![High contrast mode on a white background](docs/high-contrast.png)

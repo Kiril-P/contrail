@@ -13,7 +13,7 @@ struct TrailUniforms {
     var pixel: Float
     var highContrast: Float
     var stopCount: Float
-    var pad0: Float = 0
+    var style: Float
     var pad1: Float = 0
     var stop0: SIMD4<Float>
     var stop1: SIMD4<Float>
@@ -28,6 +28,7 @@ struct TrailUniforms {
         self.opacity = Float(settings.opacity)
         self.pixel = Float(1 / max(scale, 1))
         self.highContrast = settings.highContrast ? 1 : 0
+        self.style = Float(TrailStyle.allCases.firstIndex(of: settings.style) ?? 0)
         let stops = settings.preset.stops.map(\.simd)
         self.stopCount = Float(stops.count)
         self.stop0 = stops[0]
@@ -41,10 +42,11 @@ struct TrailUniforms {
 struct TrailFrame {
     var segments: [TrailSegment] = []
     var ripples: [RippleInstance] = []
+    var particles: [ParticleInstance] = []
 
     static let empty = TrailFrame()
 
-    var isEmpty: Bool { segments.isEmpty && ripples.isEmpty }
+    var isEmpty: Bool { segments.isEmpty && ripples.isEmpty && particles.isEmpty }
 }
 
 /// Shared Metal state: one device, queue and pipeline for every overlay and
@@ -57,6 +59,7 @@ final class TrailRenderer {
     private let queue: MTLCommandQueue
     private let pipeline: MTLRenderPipelineState
     private let ripplePipeline: MTLRenderPipelineState
+    private let particlePipeline: MTLRenderPipelineState
 
     private init?() {
         guard let device = MTLCreateSystemDefaultDevice(),
@@ -82,6 +85,7 @@ final class TrailRenderer {
             }
             self.pipeline = try makePipeline("Contrail trail", vertex: "trail_vertex", fragment: "trail_fragment")
             self.ripplePipeline = try makePipeline("Contrail ripples", vertex: "ripple_vertex", fragment: "ripple_fragment")
+            self.particlePipeline = try makePipeline("Contrail particles", vertex: "particle_vertex", fragment: "particle_fragment")
         } catch {
             NSLog("Contrail: failed to build Metal pipeline: \(error)")
             return nil
@@ -151,6 +155,7 @@ final class TrailRenderer {
         encoder.setVertexBytes(&uniforms, length: MemoryLayout<TrailUniforms>.stride, index: 1)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<TrailUniforms>.stride, index: 1)
         drawInstances(frame.segments, pipeline: pipeline, encoder: encoder)
+        drawInstances(frame.particles, pipeline: particlePipeline, encoder: encoder)
         drawInstances(frame.ripples, pipeline: ripplePipeline, encoder: encoder)
         encoder.endEncoding()
     }

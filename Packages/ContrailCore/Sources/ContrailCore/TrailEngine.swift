@@ -9,6 +9,10 @@ public struct TrailSample: Equatable, Sendable {
     /// True when this sample must not be connected to the previous one
     /// (first sample, or after the cursor teleported).
     public var startsStroke: Bool
+    /// Distance travelled along the stroke since it started, in points. Fixed
+    /// when the sample is recorded, so patterns along the path (dots, ribbon
+    /// twists) stay put instead of sliding as the tail retracts.
+    public var distance: Double = 0
 }
 
 /// A point on the visible part of the trail.
@@ -17,11 +21,14 @@ public struct TrailPoint: Equatable, Sendable {
     /// 0 at the head (newest), 1 at the very end of the tail.
     public var age: Double
     public var startsStroke: Bool
+    /// Distance along the stroke from its start, in points.
+    public var distance: Double
 
-    public init(point: CGPoint, age: Double, startsStroke: Bool) {
+    public init(point: CGPoint, age: Double, startsStroke: Bool, distance: Double = 0) {
         self.point = point
         self.age = age
         self.startsStroke = startsStroke
+        self.distance = distance
     }
 }
 
@@ -108,7 +115,15 @@ public struct TrailEngine: Sendable {
         } ?? true
         if hasMoved {
             let startsStroke = pendingBreak || samples.isEmpty
-            samples.append(TrailSample(point: smoothed, time: clock, startsStroke: startsStroke))
+            let distance: Double
+            if startsStroke {
+                distance = 0
+            } else if let last = samples.last {
+                distance = last.distance + Double(hypot(smoothed.x - last.point.x, smoothed.y - last.point.y))
+            } else {
+                distance = 0
+            }
+            samples.append(TrailSample(point: smoothed, time: clock, startsStroke: startsStroke, distance: distance))
             pendingBreak = false
             lastAppended = smoothed
         }
@@ -155,13 +170,14 @@ public struct TrailEngine: Sendable {
                             x: sample.point.x + (next.point.x - sample.point.x) * f,
                             y: sample.point.y + (next.point.y - sample.point.y) * f
                         )
-                        points.append(TrailPoint(point: p, age: 1, startsStroke: true))
+                        let d = sample.distance + (next.distance - sample.distance) * Double(f)
+                        points.append(TrailPoint(point: p, age: 1, startsStroke: true, distance: d))
                     }
                 }
                 continue
             }
             let age = min(max((clock - sample.time) / length, 0), 1)
-            points.append(TrailPoint(point: sample.point, age: age, startsStroke: sample.startsStroke || points.isEmpty))
+            points.append(TrailPoint(point: sample.point, age: age, startsStroke: sample.startsStroke || points.isEmpty, distance: sample.distance))
         }
         return points
     }

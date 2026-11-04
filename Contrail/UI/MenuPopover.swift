@@ -27,11 +27,24 @@ struct MenuPopover: View {
             PresetPicker(selection: settings.presetID)
                 .frame(maxWidth: .infinity)
 
+            Picker("Style", selection: settings.style) {
+                ForEach(TrailStyle.allCases) { style in
+                    Text(style.name).tag(style)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+
             VStack(spacing: 8) {
                 SliderRow(title: "Width", value: settings.width, range: TrailSettings.widthRange, step: 1, format: Formats.points)
                 SliderRow(title: "Length", value: settings.length, range: TrailSettings.lengthRange, format: Formats.seconds)
                 SliderRow(title: "Glow", value: settings.glow, range: TrailSettings.unitRange, format: Formats.percent)
                     .disabled(store.settings.highContrast)
+                if store.settings.style.hasParticles {
+                    SliderRow(title: "Sparks", value: settings.sparks, range: TrailSettings.unitRange, format: Formats.percent)
+                        .disabled(store.settings.highContrast)
+                }
             }
 
             HStack(alignment: .center) {

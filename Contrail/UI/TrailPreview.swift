@@ -33,6 +33,8 @@ final class PreviewTrailView: NSView {
     private let trailView = TrailLayerView(frame: .zero)
     private var engine = TrailEngine()
     private var ripples = RippleSystem()
+    private var particles = ParticleSystem()
+    private var lastStep: Double?
     private var nextClick: Double = 0
     private var clickCount = 0
     private var driver: FrameDriver?
@@ -93,6 +95,8 @@ final class PreviewTrailView: NSView {
             renderStill()
         } else if window.isVisible && window.occlusionState.contains(.visible) {
             engine.reset()
+            particles.removeAll()
+            lastStep = nil
             driver.start()
         } else {
             driver.stop()
@@ -112,7 +116,7 @@ final class PreviewTrailView: NSView {
     /// on, one still ring) instead of animating.
     private func renderStill() {
         guard bounds.width > 0 else { return }
-        var frame = TrailFrame(segments: SnapshotRenderer.sampleTrail(size: bounds.size, settings: settings))
+        var frame = SnapshotRenderer.sampleFrame(size: bounds.size, settings: settings)
         if settings.clickRipples {
             var still = RippleSystem()
             still.add(at: CGPoint(x: bounds.width * 0.82, y: bounds.height * 0.5), time: 0, color: settings.rippleColor(primary: true))
@@ -133,6 +137,8 @@ final class PreviewTrailView: NSView {
         let cursor = cursorPosition(at: now - startTime)
         engine.update(cursor: cursor, now: now, settings: settings)
         let segments = TrailGeometry.segments(for: engine.visiblePoints(length: settings.length), settings: settings)
+        particles.update(head: engine.samples.last?.point, dt: now - (lastStep ?? now), settings: settings)
+        lastStep = now
 
         // With click ripples on, "click" every 1.4 s, every third one a
         // right click, so the ring colors and size are visible here too.
@@ -142,7 +148,11 @@ final class PreviewTrailView: NSView {
             ripples.add(at: cursor, time: now, color: settings.rippleColor(primary: clickCount % 3 != 0))
             nextClick = now + 1.4
         }
-        let frame = TrailFrame(segments: segments, ripples: ripples.instances(now: now, size: previewRippleSize))
+        let frame = TrailFrame(
+            segments: segments,
+            ripples: ripples.instances(now: now, size: previewRippleSize),
+            particles: particles.instances(settings: settings)
+        )
         trailView.render(frame, origin: .zero, settings: settings)
     }
 }

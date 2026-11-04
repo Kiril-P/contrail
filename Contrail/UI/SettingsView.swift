@@ -18,6 +18,13 @@ struct SettingsView: View {
                 LabeledContent("Color") {
                     PresetPicker(selection: settings.presetID, size: 22, spacing: 8)
                 }
+                Picker("Style", selection: settings.style) {
+                    ForEach(TrailStyle.allCases) { style in
+                        Text(style.name).tag(style)
+                    }
+                }
+                SliderRow(title: "Sparks", value: settings.sparks, range: TrailSettings.unitRange, format: Formats.percent)
+                    .disabled(!store.settings.style.hasParticles || store.settings.highContrast)
                 SliderRow(title: "Width", value: settings.width, range: TrailSettings.widthRange, step: 1, format: Formats.points)
                 SliderRow(title: "Length", value: settings.length, range: TrailSettings.lengthRange, format: Formats.seconds)
                 SliderRow(title: "Glow", value: settings.glow, range: TrailSettings.unitRange, format: Formats.percent)
