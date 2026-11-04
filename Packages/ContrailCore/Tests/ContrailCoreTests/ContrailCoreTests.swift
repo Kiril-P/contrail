@@ -125,6 +125,19 @@ import Testing
         #expect(segments[0].p0 == segments[0].p1)
     }
 
+    @Test func strokeEndsWithRoundHead() {
+        let points = [
+            TrailPoint(point: CGPoint(x: 0, y: 0), age: 1, startsStroke: true),
+            TrailPoint(point: CGPoint(x: 0.3, y: 0), age: 0.5, startsStroke: false),
+            TrailPoint(point: CGPoint(x: 0.6, y: 0), age: 0, startsStroke: false),
+        ]
+        let segments = TrailGeometry.segments(for: points, settings: .default)
+        let head = segments.last!
+        #expect(head.p0 == head.p1)
+        #expect(head.p0 == SIMD2<Float>(0.6, 0))
+        #expect(head.u0 == 0 && head.r0 == TrailGeometry.radius(age: 0, settings: .default))
+    }
+
     @Test func segmentLayoutMatchesShader() {
         #expect(MemoryLayout<TrailSegment>.stride == 32)
     }

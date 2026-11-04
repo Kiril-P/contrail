@@ -84,8 +84,10 @@ enum SnapshotRenderer {
     /// very short segments, which the fast flick never exercises.
     static func slowTrail(size: CGSize, settings: TrailSettings, speed: Double) -> [TrailSegment] {
         var engine = TrailEngine()
-        let frames = 360
-        var position = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
+        // Start near the left edge and stop before the head leaves the canvas.
+        let seconds = min(3, Double(size.width) * 0.8 / max(speed, 1))
+        let frames = max(Int(seconds * 120), 2)
+        var position = CGPoint(x: size.width * 0.1, y: size.height * 0.4)
         for frame in 0..<frames {
             if frame % 2 == 0 {
                 position.x += speed / 60

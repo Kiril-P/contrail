@@ -69,7 +69,9 @@ final class TrailController {
             engine.reset()
             segments = []
             for overlay in overlays {
-                overlay.view.render([], origin: overlay.panel.frame.origin, settings: store.settings)
+                // Hide rather than draw a clear frame: drawing can block on a
+                // display in standby.
+                overlay.view.hideStaleContent()
                 overlay.panel.orderOut(nil)
             }
         }

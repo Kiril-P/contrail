@@ -8,6 +8,9 @@ final class TrailLayerView: NSView {
     private var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
     /// True when the last frame drawn was empty, so another clear is unnecessary.
     private(set) var isClear = true
+    /// After `hideStaleContent()`, the number of new frames still to present
+    /// before the layer is shown again.
+    private var framesUntilShown = 0
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -54,7 +57,14 @@ final class TrailLayerView: NSView {
         if renderer.draw(segments, uniforms: uniforms, into: metalLayer) {
             isClear = segments.isEmpty
             if metalLayer.isHidden {
-                setLayerHidden(false)
+                // Presentation is asynchronous, so the first new frame may not
+                // be on screen yet when this returns. Frames present in order,
+                // so once the second one is submitted the first has replaced
+                // the stale content and showing the layer can't flash it.
+                framesUntilShown -= 1
+                if framesUntilShown <= 0 {
+                    setLayerHidden(false)
+                }
             }
         }
     }
@@ -65,6 +75,7 @@ final class TrailLayerView: NSView {
     func hideStaleContent() {
         guard !isClear else { return }
         setLayerHidden(true)
+        framesUntilShown = 2
         isClear = true
     }
 

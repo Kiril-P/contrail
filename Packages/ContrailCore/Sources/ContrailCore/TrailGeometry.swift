@@ -110,6 +110,18 @@ public enum TrailGeometry {
                 previousAge = age
             }
         }
+
+        // A zero-length capsule at the head. Each capsule blends from its older
+        // to its newer end across its own length, and on slow movement that is
+        // a fraction of a point, a sharp step across the whole halo. Every
+        // other capsule's step is covered by the round cap of the capsule ahead
+        // of it; this gives the newest one the same cover.
+        if let head = pts.last {
+            let p = SIMD2<Float>(Float(head.point.x), Float(head.point.y))
+            let r = radius(age: head.age, settings: settings)
+            let u = Float(head.age)
+            segments.append(TrailSegment(p0: p, p1: p, r0: r, r1: r, u0: u, u1: u))
+        }
     }
 
     static func reflect(_ point: CGPoint, about pivot: CGPoint) -> CGPoint {
