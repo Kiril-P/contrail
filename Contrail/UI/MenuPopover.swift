@@ -11,6 +11,8 @@ struct MenuPopover: View {
     let openSettings: () -> Void
 
     private var settings: Binding<TrailSettings> { $store.settings }
+    /// Re-read when the popover opens, so a shortcut changed in Settings shows.
+    @State private var shortcut = KeyboardShortcuts.getShortcut(for: .toggleTrail)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -48,6 +50,7 @@ struct MenuPopover: View {
         }
         .padding(16)
         .frame(width: 320)
+        .onAppear { shortcut = KeyboardShortcuts.getShortcut(for: .toggleTrail) }
     }
 
     private var header: some View {
@@ -56,7 +59,7 @@ struct MenuPopover: View {
                 HStack(spacing: 6) {
                     Text("Contrail")
                         .font(.headline)
-                    if let shortcut = KeyboardShortcuts.getShortcut(for: .toggleTrail) {
+                    if let shortcut {
                         Text(shortcut.description)
                             .font(.caption.monospaced())
                             .foregroundStyle(.secondary)

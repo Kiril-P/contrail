@@ -10,10 +10,10 @@ final class SettingsStore: ObservableObject {
 
     @Published var settings: TrailSettings {
         didSet {
-            let clamped = settings.clamped()
-            if clamped != settings {
+            let normalized = settings.clamped().reconcilingBaseLook()
+            if normalized != settings {
                 // Assigning inside didSet doesn't re-run didSet, so save here.
-                settings = clamped
+                settings = normalized
             }
             if oldValue != settings { save() }
         }
@@ -25,7 +25,7 @@ final class SettingsStore: ObservableObject {
         self.defaults = defaults
         if let data = defaults.data(forKey: Self.key),
            let decoded = try? JSONDecoder().decode(TrailSettings.self, from: data) {
-            settings = decoded.clamped()
+            settings = decoded.clamped().reconcilingBaseLook()
         } else {
             settings = .default
         }

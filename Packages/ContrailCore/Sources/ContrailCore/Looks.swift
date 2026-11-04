@@ -98,6 +98,12 @@ public struct Look: Identifiable, Equatable, Sendable {
         settings.baseLookID = id
     }
 
+    /// The size whose width is closest to `width`: how big a Custom trail
+    /// based on this Look is, so Reset keeps that size.
+    public func closestSize(toWidth width: Double) -> LookSize {
+        LookSize.allCases.min { abs(self.width(at: $0) - width) < abs(self.width(at: $1) - width) } ?? .medium
+    }
+
     /// The size at which `settings` is exactly this Look, if any.
     public func matchingSize(_ settings: TrailSettings) -> LookSize? {
         func same(_ a: Double, _ b: Double) -> Bool { abs(a - b) < 0.001 }
@@ -136,5 +142,26 @@ public enum LookSelection: Equatable, Sendable {
     public var size: LookSize? {
         if case let .look(_, size) = self { return size }
         return nil
+    }
+}
+
+extension TrailSettings {
+    /// These settings with `baseLookID` pointing at the Look they currently
+    /// match, if any, so a later tweak reads "Custom · based on" the Look the
+    /// user actually saw, and Reset returns to it.
+    public func reconcilingBaseLook() -> TrailSettings {
+        guard let look = LookSelection(self).look, baseLookID != look.id else { return self }
+        var copy = self
+        copy.baseLookID = look.id
+        return copy
+    }
+
+    /// The size to use when picking a Look from these settings: the current
+    /// Look's size, or for Custom the size closest to the current width.
+    public var lookSize: LookSize {
+        switch LookSelection(self) {
+        case let .look(_, size): size
+        case let .custom(base): (base ?? Look.look(id: Look.defaultID)!).closestSize(toWidth: width)
+        }
     }
 }

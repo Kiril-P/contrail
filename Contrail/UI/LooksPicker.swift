@@ -16,11 +16,22 @@ final class LookThumbnails {
         var settings = TrailSettings.default
         look.apply(to: &settings, size: size)
         settings.highContrast = highContrast
-        // Transparent: the card draws the background behind it.
-        guard let cgImage = SnapshotRenderer.renderImage(settings: settings, background: nil, size: Self.size) else { return nil }
+        // Transparent: the card draws the background behind it. Each Look is
+        // sampled with its own trail length, which is part of its character.
+        guard let cgImage = SnapshotRenderer.renderImage(
+            settings: settings, background: nil, size: Self.size, keepLength: true
+        ) else { return nil }
         let image = NSImage(cgImage: cgImage, size: Self.size)
         cache[key] = image
         return image
+    }
+
+    /// Renders every Look's still for one size and mode ahead of time, so
+    /// opening the popover doesn't stall on the GPU.
+    func prewarm(size: LookSize, highContrast: Bool) {
+        for look in Look.all {
+            _ = image(for: look, size: size, highContrast: highContrast)
+        }
     }
 }
 
@@ -29,6 +40,9 @@ final class LookThumbnails {
 struct LooksPicker: View {
     @ObservedObject var store: SettingsStore
     var columns = 2
+    /// Animate the selected Look (and a Custom trail). Off in Settings,
+    /// which has its own preview.
+    var livePreview = true
     var openSettings: (() -> Void)?
 
     private var selection: LookSelection { LookSelection(store.settings) }
@@ -41,7 +55,8 @@ struct LooksPicker: View {
                         look: look,
                         store: store,
                         isSelected: selection.look?.id == look.id,
-                        size: selection.size ?? .medium
+                        isLive: livePreview && selection.look?.id == look.id,
+                        size: store.settings.lookSize
                     ) {
                         choose(look)
                     }
@@ -49,6 +64,10 @@ struct LooksPicker: View {
             }
 
             if case let .custom(base) = selection {
+                if livePreview {
+                    // No card shows a Custom trail, so preview it here.
+                    PreviewCard(store: store, height: LookThumbnails.size.height)
+                }
                 HStack(spacing: 6) {
                     Image(systemName: "slider.horizontal.3")
                         .foregroundStyle(.secondary)
@@ -72,17 +91,20 @@ struct LooksPicker: View {
                 Text("Size")
                 Spacer()
                 Picker("Size", selection: Binding(
-                    get: { selection.size ?? .medium },
+                    get: { store.settings.lookSize },
                     set: { size in
                         if let look = selection.look { look.apply(to: &store.settings, size: size) }
                     }
                 )) {
                     ForEach(LookSize.allCases) { size in
-                        Text(size.label).tag(size).help(size.name)
+                        Text(size.label).tag(size)
+                            .help(size.name)
+                            .accessibilityLabel(size.name)
                     }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .accessibilityLabel("Trail size")
                 .fixedSize()
                 .disabled(selection.look == nil)
                 .help(selection.look == nil ? "Adjust the width in Settings" : "Trail size")
@@ -90,8 +112,10 @@ struct LooksPicker: View {
         }
     }
 
+    /// Applies `look`, keeping the current size (for Custom, the size
+    /// closest to its width).
     private func choose(_ look: Look) {
-        look.apply(to: &store.settings, size: selection.size ?? .medium)
+        look.apply(to: &store.settings, size: store.settings.lookSize)
     }
 }
 
@@ -100,6 +124,7 @@ private struct LookCard: View {
     let look: Look
     @ObservedObject var store: SettingsStore
     let isSelected: Bool
+    let isLive: Bool
     let size: LookSize
     let action: () -> Void
 
@@ -107,9 +132,12 @@ private struct LookCard: View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         Button(action: action) {
             VStack(alignment: .leading, spacing: 5) {
-                thumbnail
+                // A fixed-height slot that never widens its grid column.
+                Color.clear
                     .frame(height: LookThumbnails.size.height)
-                    .frame(maxWidth: .infinity)
+                    .frame(minWidth: 0, maxWidth: .infinity)
+                    .overlay { thumbnail }
+                    .clipped()
                     .background(store.settings.highContrast ? Color.white : Color(red: 0x14 / 255, green: 0x16 / 255, blue: 0x1C / 255))
                     .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 HStack {
@@ -136,7 +164,7 @@ private struct LookCard: View {
     }
 
     @ViewBuilder private var thumbnail: some View {
-        if isSelected {
+        if isLive {
             // One live preview, using the real engine and renderer.
             TrailPreview(store: store)
         } else if let image = LookThumbnails.shared.image(for: look, size: size, highContrast: store.settings.highContrast) {

@@ -35,6 +35,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = TrailController(store: store, activation: activation)
         controller.start()
         self.controller = controller
+        // Render the Look thumbnails once the app is idle, not when the
+        // popover first opens.
+        let settings = store.settings
+        DispatchQueue.main.async {
+            LookThumbnails.shared.prewarm(size: settings.lookSize, highContrast: settings.highContrast)
+        }
     }
 
     func showSettings() {
