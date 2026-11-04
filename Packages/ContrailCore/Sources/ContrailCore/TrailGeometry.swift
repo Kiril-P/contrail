@@ -102,10 +102,11 @@ public enum TrailGeometry {
             let polyline = pts.map { PathPoint(point: $0.point, age: $0.age, distance: $0.distance) }
             appendDots(along: polyline, settings: settings, into: &segments)
             // The head dot marks the cursor, unless it would sit on top of
-            // the last laid dot.
+            // the last dot laid in the visible part of this stroke.
             let period = dotPeriod(settings: settings)
-            let sinceLastDot = head.distance - (head.distance / period).rounded(.down) * period
-            if sinceLastDot > 0, sinceLastDot < period * 0.5 {
+            let lastDot = (head.distance / period).rounded(.down) * period
+            let sinceLastDot = head.distance - lastDot
+            if lastDot >= first.distance, sinceLastDot > 0, sinceLastDot < period * 0.5 {
                 return
             }
         } else {

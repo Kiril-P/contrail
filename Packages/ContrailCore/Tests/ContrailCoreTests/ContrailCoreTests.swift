@@ -259,6 +259,27 @@ import Testing
         }
     }
 
+    @Test func dottedHeadShowsWhenTheLastDotHasFadedAway() {
+        var settings = TrailSettings(width: 8)
+        settings.style = .dotted
+        // Period is 20; the visible stretch 41...45 contains no multiple of it.
+        let points = [
+            TrailPoint(point: CGPoint(x: 41, y: 0), age: 1, startsStroke: true, distance: 41),
+            TrailPoint(point: CGPoint(x: 45, y: 0), age: 0, startsStroke: false, distance: 45),
+        ]
+        let segments = TrailGeometry.segments(for: points, settings: settings)
+        #expect(segments.count == 1)
+        #expect(segments[0].p0 == SIMD2<Float>(45, 0))
+
+        // With the dot at 40 still visible, the head 5 pt later is skipped.
+        let withDot = [
+            TrailPoint(point: CGPoint(x: 39, y: 0), age: 1, startsStroke: true, distance: 39),
+            TrailPoint(point: CGPoint(x: 45, y: 0), age: 0, startsStroke: false, distance: 45),
+        ]
+        let dots = TrailGeometry.segments(for: withDot, settings: settings)
+        #expect(dots.map(\.p0) == [SIMD2<Float>(40, 0)])
+    }
+
     @Test func ribbonTwistsAlongTheStroke() {
         var settings = TrailSettings(width: 10, taper: 0)
         settings.style = .ribbon
