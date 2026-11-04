@@ -33,10 +33,14 @@ final class SettingsStore: ObservableObject {
 
     var preset: ColorPreset { settings.preset }
 
-    func resetToDefaults() {
-        let enabled = settings.isEnabled
+    /// Resets how the trail looks and moves. On/off and activation rules
+    /// (shortcut, hold key, per-app rules) are kept.
+    func resetAppearance() {
         var fresh = TrailSettings.default
-        fresh.isEnabled = enabled
+        fresh.isEnabled = settings.isEnabled
+        fresh.holdModifier = settings.holdModifier
+        fresh.appRules = settings.appRules
+        fresh.offInGames = settings.offInGames
         settings = fresh
     }
 

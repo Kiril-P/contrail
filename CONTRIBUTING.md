@@ -8,7 +8,7 @@ Contrail is an independent, original project. Don't decompile, disassemble, or c
 
 ## Getting started
 
-1. Open `Contrail.xcodeproj` in Xcode 16 or later and press Run.
+1. Open `Contrail.xcodeproj` in Xcode 26 or later and press Run.
 2. Run the core tests: `cd Packages/ContrailCore && swift test`.
 
 Logic that doesn't need AppKit (trail model, geometry, settings) belongs in `Packages/ContrailCore` with tests. App, window and rendering code lives in `Contrail/`.

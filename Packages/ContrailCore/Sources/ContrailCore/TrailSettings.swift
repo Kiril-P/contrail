@@ -64,6 +64,12 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     public var style: TrailStyle
     /// Particle amount for the Comet and Sparks styles, 0…1.
     public var sparks: Double
+    /// When set, the trail only draws while this key is held.
+    public var holdModifier: HoldModifier
+    /// Per-app overrides, applied while that app is frontmost.
+    public var appRules: [AppRule]
+    /// Turn the trail off while a game is frontmost.
+    public var offInGames: Bool
 
     public static let widthRange: ClosedRange<Double> = 2...20
     public static let lengthRange: ClosedRange<Double> = 0.15...1.5
@@ -89,7 +95,10 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         clickSize: Double = 56,
         rightClickPresetID: String = "magenta",
         style: TrailStyle = .neon,
-        sparks: Double = 0.45
+        sparks: Double = 0.45,
+        holdModifier: HoldModifier = .none,
+        appRules: [AppRule] = [],
+        offInGames: Bool = true
     ) {
         self.version = Self.currentVersion
         self.isEnabled = isEnabled
@@ -107,6 +116,9 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.rightClickPresetID = rightClickPresetID
         self.style = style
         self.sparks = sparks
+        self.holdModifier = holdModifier
+        self.appRules = appRules
+        self.offInGames = offInGames
     }
 
     /// The same settings with every value forced into its valid range.
@@ -146,6 +158,7 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         case version, isEnabled, presetID, width, length, glow
         case taper, followSpeed, linger, opacity, highContrast
         case clickRipples, clickSize, rightClickPresetID, style, sparks
+        case holdModifier, appRules, offInGames
     }
 
     public init(from decoder: Decoder) throws {
@@ -168,6 +181,22 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         // An unknown style (from a newer version) falls back to Neon.
         self.style = (try? c.decodeIfPresent(TrailStyle.self, forKey: .style)) ?? d.style
         self.sparks = (try? c.decodeIfPresent(Double.self, forKey: .sparks)) ?? d.sparks
+        self.holdModifier = (try? c.decodeIfPresent(HoldModifier.self, forKey: .holdModifier)) ?? d.holdModifier
+        // Rules decode one by one: a rule this version can't read (say, a
+        // mode added later) is skipped instead of dropping all of them.
+        self.appRules = (try? c.decodeIfPresent([Lossy<AppRule>].self, forKey: .appRules))?
+            .compactMap(\.value) ?? d.appRules
+        self.offInGames = (try? c.decodeIfPresent(Bool.self, forKey: .offInGames)) ?? d.offInGames
+    }
+}
+
+/// Decodes a value, or nil if it can't be read, without failing the
+/// surrounding container.
+private struct Lossy<Value: Decodable>: Decodable {
+    let value: Value?
+
+    init(from decoder: Decoder) throws {
+        value = try? Value(from: decoder)
     }
 }
 

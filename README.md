@@ -40,9 +40,18 @@ Click the Contrail icon in the menu bar. The popover has everything you need dur
 
 **Settings…** (⌘,) adds Taper, Opacity, Follow (how tightly the trail tracks the pointer), Hold (keep the trail in place briefly after the pointer stops), and Open at login. Settings are saved automatically.
 
+### Turning the trail on and off
+
+- **Shortcut:** ⌃⌥T turns the trail on or off from anywhere. Change it in **Settings → Activation**.
+- **Hold to show:** only draw while ⌥, ⌃, ⌘ or ⇧ is held, so the trail appears exactly when you want to point at something.
+- **Per-app rules:** keep the trail always on in Keynote, or always off in a video player. A rule wins over the switch. Using the switch or shortcut in that app overrides the rule until you switch apps.
+- **Games:** the trail turns off while an app that declares itself a game is in front.
+
+None of this needs any permission. The shortcut uses the system hot-key API, and the hold key is read from mouse events Contrail already sees.
+
 ## Build from source
 
-You need Xcode 16 or later.
+You need Xcode 26 or later.
 
 ```sh
 git clone https://github.com/Kiril-P/contrail.git
@@ -83,7 +92,8 @@ Contrail.app/Contents/MacOS/Contrail --snapshot-presets presets.png
 - [x] **0.1**: menu-bar app and glowing trail on every screen
 - [x] **0.2**: customization (width, length, glow, taper, opacity, follow, hold), nine color presets, high-contrast mode for white backgrounds, live preview
 - [ ] Letter gestures: draw a letter with the cursor to open apps, run Shortcuts, press keys, and more
-- [ ] Toggle shortcut, sparks, auto-updates, Homebrew cask
+- [x] **0.3**: click ripples, trail styles (Comet, Ribbon, Dotted, Sparks), toggle shortcut, hold-to-show, per-app rules
+- [ ] Auto-updates, Homebrew cask
 
 ## Contributing
 
