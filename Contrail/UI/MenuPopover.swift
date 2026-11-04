@@ -6,6 +6,7 @@ import SwiftUI
 /// Set-once options live in the Settings window.
 struct MenuPopover: View {
     @ObservedObject var store: SettingsStore
+    @ObservedObject var activation: ActivationController
     let openSettings: () -> Void
 
     private var settings: Binding<TrailSettings> { $store.settings }
@@ -13,13 +14,24 @@ struct MenuPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Contrail")
-                    .font(.headline)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Contrail")
+                        .font(.headline)
+                    if let reason = activation.decision.reason {
+                        Text(reason)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Spacer()
-                Toggle("Show trail", isOn: settings.isEnabled)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
-                    .accessibilityLabel("Show trail")
+                Toggle("Show trail", isOn: Binding(
+                    get: { activation.isOn },
+                    set: { _ in activation.toggle() }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .accessibilityLabel("Show trail")
+                .help("Toggle with your shortcut (⌃⌥T by default)")
             }
 
             PreviewCard(store: store)
@@ -106,7 +118,6 @@ struct PreviewCard: View {
             .background(store.settings.highContrast ? Color.white : Color(red: 0x14 / 255, green: 0x16 / 255, blue: 0x1C / 255))
             .clipShape(shape)
             .overlay(shape.strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
-            .opacity(store.settings.isEnabled ? 1 : 0.5)
             .accessibilityElement()
             .accessibilityLabel("Trail preview")
     }

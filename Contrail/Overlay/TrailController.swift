@@ -18,6 +18,7 @@ final class TrailController {
     }
 
     private let store: SettingsStore
+    private let activation: ActivationController
     private var engine = TrailEngine()
     private var ripples = RippleSystem()
     private var particles = ParticleSystem()
@@ -32,8 +33,9 @@ final class TrailController {
     /// When the trail last became empty.
     private var emptySince: CFTimeInterval?
 
-    init(store: SettingsStore) {
+    init(store: SettingsStore, activation: ActivationController) {
         self.store = store
+        self.activation = activation
     }
 
     func start() {
@@ -52,8 +54,8 @@ final class TrailController {
             MainActor.assumeIsolated { self?.engine.reset() }
         })
 
-        store.$settings
-            .map(\.isEnabled)
+        activation.$decision
+            .map(\.isOn)
             .removeDuplicates()
             .sink { [weak self] enabled in
                 self?.setEnabled(enabled)
@@ -102,11 +104,11 @@ final class TrailController {
                 self.frame(for: view)
             }
             overlays.append(ScreenOverlay(panel: panel, view: view, driver: driver))
-            if store.settings.isEnabled {
+            if activation.isOn {
                 panel.orderFrontRegardless()
             }
         }
-        if store.settings.isEnabled {
+        if activation.isOn {
             wake()
         }
     }
@@ -115,13 +117,15 @@ final class TrailController {
 
     private func installMonitors() {
         let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] _ in
-            MainActor.assumeIsolated { self?.wake() }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] event in
+            let flags = event.modifierFlags
+            MainActor.assumeIsolated { self?.moved(flags: flags) }
         }) {
             monitors.append(global)
         }
         if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] event in
-            MainActor.assumeIsolated { self?.wake() }
+            let flags = event.modifierFlags
+            MainActor.assumeIsolated { self?.moved(flags: flags) }
             return event
         }) {
             monitors.append(local)
@@ -130,23 +134,32 @@ final class TrailController {
         // shouldn't ripple, and global monitors never see this app's events.
         let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: clicks, handler: { [weak self] event in
-            let primary = event.type == .leftMouseDown && !event.modifierFlags.contains(.control)
-            MainActor.assumeIsolated { self?.click(primary: primary) }
+            let flags = event.modifierFlags
+            let primary = event.type == .leftMouseDown && !flags.contains(.control)
+            MainActor.assumeIsolated { self?.click(primary: primary, flags: flags) }
         }) {
             monitors.append(global)
         }
     }
 
-    private func click(primary: Bool) {
+    /// Mouse movement wakes the trail, unless a hold key is required and up.
+    /// Mouse events carry the modifier state, so no keyboard monitoring (and
+    /// no permission) is needed.
+    private func moved(flags: NSEvent.ModifierFlags) {
+        guard store.settings.holdModifier.isSatisfied(by: flags) else { return }
+        wake()
+    }
+
+    private func click(primary: Bool, flags: NSEvent.ModifierFlags) {
         let settings = store.settings
-        guard settings.isEnabled, settings.clickRipples else { return }
+        guard activation.isOn, settings.clickRipples, settings.holdModifier.isSatisfied(by: flags) else { return }
         ripples.add(at: NSEvent.mouseLocation, time: CACurrentMediaTime(), color: settings.rippleColor(primary: primary))
         wake()
     }
 
     /// Starts every display link if the trail is enabled and currently idle.
     private func wake(enabled: Bool? = nil) {
-        guard enabled ?? store.settings.isEnabled, !isActive else { return }
+        guard enabled ?? activation.isOn, !isActive else { return }
         isActive = true
         emptySince = nil
         for overlay in overlays { overlay.driver.start() }
@@ -168,7 +181,13 @@ final class TrailController {
         if now - lastUpdate > 0.001 {
             let dt = now - lastUpdate
             lastUpdate = now
-            engine.update(cursor: NSEvent.mouseLocation, now: now, settings: settings)
+            // With a hold key set, record the cursor only while it's down;
+            // otherwise let the trail drain away.
+            if settings.holdModifier.isSatisfied(by: NSEvent.modifierFlags) {
+                engine.update(cursor: NSEvent.mouseLocation, now: now, settings: settings)
+            } else {
+                engine.drain(now: now, settings: settings)
+            }
             let points = engine.visiblePoints(length: settings.length)
             particles.update(head: engine.samples.last?.point, dt: dt, settings: settings)
             ripples.prune(now: now)

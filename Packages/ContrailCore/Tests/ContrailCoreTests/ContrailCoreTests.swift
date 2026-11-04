@@ -325,6 +325,81 @@ import Testing
     }
 }
 
+@Suite struct ActivationTests {
+    let keynote = FrontmostApp(bundleID: "com.apple.iWork.Keynote", name: "Keynote", isGame: false)
+    let game = FrontmostApp(bundleID: "com.example.game", name: "Space Game", isGame: true)
+    let editor = FrontmostApp(bundleID: "com.example.editor", name: "Editor", isGame: false)
+
+    func settings(enabled: Bool, rules: [AppRule] = [], offInGames: Bool = true) -> TrailSettings {
+        var s = TrailSettings(isEnabled: enabled)
+        s.appRules = rules
+        s.offInGames = offInGames
+        return s
+    }
+
+    @Test func manualSettingAppliesWithoutRules() {
+        #expect(ActivationPolicy.decide(settings: settings(enabled: true), frontmost: editor, override: nil).isOn)
+        #expect(!ActivationPolicy.decide(settings: settings(enabled: false), frontmost: editor, override: nil).isOn)
+        #expect(ActivationPolicy.decide(settings: settings(enabled: true), frontmost: nil, override: nil).reason == nil)
+    }
+
+    @Test func appRulesBeatTheManualSetting() {
+        let rules = [AppRule(bundleID: keynote.bundleID!, name: "Keynote", mode: .always)]
+        let off = ActivationPolicy.decide(settings: settings(enabled: false, rules: rules), frontmost: keynote, override: nil)
+        #expect(off.isOn && off.reason == "On in Keynote")
+        let never = [AppRule(bundleID: editor.bundleID!, name: "Editor", mode: .never)]
+        #expect(!ActivationPolicy.decide(settings: settings(enabled: true, rules: never), frontmost: editor, override: nil).isOn)
+    }
+
+    @Test func gamesTurnOffUnlessDisabledOrRuled() {
+        #expect(!ActivationPolicy.decide(settings: settings(enabled: true), frontmost: game, override: nil).isOn)
+        #expect(ActivationPolicy.decide(settings: settings(enabled: true, offInGames: false), frontmost: game, override: nil).isOn)
+        let always = [AppRule(bundleID: game.bundleID!, name: "Space Game", mode: .always)]
+        #expect(ActivationPolicy.decide(settings: settings(enabled: true, rules: always), frontmost: game, override: nil).isOn)
+    }
+
+    @Test func overrideOnlyMattersWhileARuleApplies() {
+        let rules = [AppRule(bundleID: keynote.bundleID!, name: "Keynote", mode: .always)]
+        let s = settings(enabled: true, rules: rules)
+        let overridden = ActivationPolicy.decide(settings: s, frontmost: keynote, override: false)
+        #expect(!overridden.isOn && overridden.reason == "Overridden until you switch apps")
+        // No rule for the editor, so a stale override is ignored.
+        #expect(ActivationPolicy.decide(settings: s, frontmost: editor, override: false).isOn)
+    }
+
+    @Test func gameCategories() {
+        #expect(FrontmostApp.isGameCategory("public.app-category.games"))
+        #expect(FrontmostApp.isGameCategory("public.app-category.action-games"))
+        #expect(!FrontmostApp.isGameCategory("public.app-category.developer-tools"))
+        #expect(!FrontmostApp.isGameCategory(nil))
+    }
+
+    @Test func drainEmptiesTheTrailAndStartsANewStroke() {
+        var engine = TrailEngine()
+        let s = TrailSettings(length: 0.3, followSpeed: 1)
+        for i in 0..<20 {
+            engine.update(cursor: CGPoint(x: Double(i) * 5, y: 0), now: Double(i) / 120, settings: s)
+        }
+        var now = 20.0 / 120
+        for _ in 0..<60 {
+            engine.drain(now: now, settings: s)
+            now += 1 / 120
+        }
+        #expect(engine.isEmpty)
+        engine.update(cursor: CGPoint(x: 500, y: 0), now: now, settings: s)
+        #expect(engine.samples.first?.startsStroke == true)
+    }
+
+    @Test func rulesRoundTrip() throws {
+        var s = TrailSettings()
+        s.holdModifier = .option
+        s.appRules = [AppRule(bundleID: "com.apple.iWork.Keynote", name: "Keynote", mode: .always)]
+        s.offInGames = false
+        let decoded = try JSONDecoder().decode(TrailSettings.self, from: JSONEncoder().encode(s))
+        #expect(decoded == s)
+    }
+}
+
 @Suite struct SettingsTests {
     @Test func decodesPartialJSONWithDefaults() throws {
         let json = #"{"width": 9, "presetID": "cyan"}"#.data(using: .utf8)!

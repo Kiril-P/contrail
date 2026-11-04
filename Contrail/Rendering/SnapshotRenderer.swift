@@ -69,12 +69,22 @@ enum SnapshotRenderer {
         }
         let content = HStack(alignment: .top, spacing: 24) {
             VStack(alignment: .leading, spacing: 24) {
-                MenuPopover(store: store, openSettings: {})
+                MenuPopover(store: store, activation: ActivationController(store: store), openSettings: {})
                     .background(Color(nsColor: .windowBackgroundColor))
                 glyphs
             }
-            SettingsView(store: store)
+            ForEach(0..<3) { tab in
+                Group {
+                    switch tab {
+                    case 0: AppearanceSettings(store: store)
+                    case 1: ActivationSettings(store: store)
+                    default: GeneralSettings(store: store)
+                    }
+                }
+                .frame(width: 480)
+                .fixedSize(horizontal: false, vertical: true)
                 .background(Color(nsColor: .windowBackgroundColor))
+            }
         }
         .padding(24)
         .background(Color.gray.opacity(0.3))

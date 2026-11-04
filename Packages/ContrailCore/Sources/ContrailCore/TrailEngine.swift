@@ -149,6 +149,21 @@ public struct TrailEngine: Sendable {
         }
     }
 
+    /// Advances time without recording the cursor, so the trail drains away
+    /// (used while a required hold key is up). The next recorded position
+    /// starts a new stroke instead of connecting back to where input stopped.
+    public mutating func drain(now: Double, settings: TrailSettings) {
+        let dt = lastRealTime.map { min(max(now - $0, 0), Self.maxStep) } ?? 0
+        lastRealTime = now
+        clock += dt
+        filter.reset()
+        lastRaw = nil
+        stillSince = nil
+        pendingBreak = true
+        lastAppended = nil
+        prune(length: settings.length)
+    }
+
     /// The visible trail, oldest point first, with the tail cut exactly at
     /// `length` seconds so it retracts smoothly instead of popping.
     public func visiblePoints(length: Double) -> [TrailPoint] {

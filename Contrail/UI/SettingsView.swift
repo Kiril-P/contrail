@@ -1,13 +1,31 @@
 import AppKit
 import ContrailCore
+import KeyboardShortcuts
 import SwiftUI
+import UniformTypeIdentifiers
 
+/// The Settings window: Appearance, Activation and General tabs.
 struct SettingsView: View {
     @ObservedObject var store: SettingsStore
-    @State private var launchAtLogin = LaunchAtLogin.isEnabled || LaunchAtLogin.needsApproval
-    @State private var launchNeedsApproval = LaunchAtLogin.needsApproval
-    @State private var launchError: String?
 
+    var body: some View {
+        TabView {
+            AppearanceSettings(store: store)
+                .tabItem { Label("Appearance", systemImage: "paintbrush") }
+            ActivationSettings(store: store)
+                .tabItem { Label("Activation", systemImage: "keyboard") }
+            GeneralSettings(store: store)
+                .tabItem { Label("General", systemImage: "gearshape") }
+        }
+        .frame(width: 480)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+// MARK: Appearance
+
+struct AppearanceSettings: View {
+    @ObservedObject var store: SettingsStore
     private var settings: Binding<TrailSettings> { $store.settings }
 
     var body: some View {
@@ -58,8 +76,170 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("General") {
-                Toggle("Show trail", isOn: settings.isEnabled)
+            HStack {
+                Spacer()
+                Button("Reset Appearance") { store.resetAppearance() }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func followLabel(_ value: Double) -> String {
+        value >= 0.999 ? "Locked" : Formats.percent(value)
+    }
+}
+
+// MARK: Activation
+
+struct ActivationSettings: View {
+    @ObservedObject var store: SettingsStore
+    private var settings: Binding<TrailSettings> { $store.settings }
+
+    /// Presentation apps offered as one-click rules while the list is empty.
+    private static let suggestions: [(bundleID: String, name: String)] = [
+        ("com.apple.iWork.Keynote", "Keynote"),
+        ("com.microsoft.Powerpoint", "PowerPoint"),
+    ]
+
+    var body: some View {
+        Form {
+            Section("Shortcut") {
+                KeyboardShortcuts.Recorder("Turn trail on or off", name: .toggleTrail)
+                Picker("Show trail only while holding", selection: settings.holdModifier) {
+                    ForEach(HoldModifier.allCases) { modifier in
+                        Text(modifier.name).tag(modifier)
+                    }
+                }
+            }
+
+            Section {
+                if store.settings.appRules.isEmpty {
+                    Text("No rules yet. Rules turn the trail on or off while an app is in front.")
+                        .foregroundStyle(.secondary)
+                    let available = Self.suggestions.filter { AppInfo.isInstalled($0.bundleID) }
+                    if !available.isEmpty {
+                        HStack {
+                            Text("Suggested:")
+                                .foregroundStyle(.secondary)
+                            ForEach(available, id: \.bundleID) { app in
+                                Button("Always on in \(app.name)") {
+                                    addRule(bundleID: app.bundleID, name: app.name)
+                                }
+                            }
+                        }
+                    }
+                }
+                ForEach(store.settings.appRules) { rule in
+                    HStack(spacing: 10) {
+                        Image(nsImage: AppInfo.icon(for: rule.bundleID))
+                            .resizable()
+                            .frame(width: 20, height: 20)
+                        Text(rule.name)
+                        Spacer()
+                        Picker(rule.name, selection: mode(for: rule.bundleID)) {
+                            ForEach(AppRuleMode.allCases) { mode in
+                                Text(mode.name).tag(mode)
+                            }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                        Button {
+                            store.settings.appRules.removeAll { $0.bundleID == rule.bundleID }
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Remove rule for \(rule.name)")
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button("Add App…", action: chooseApp)
+                }
+            } header: {
+                Text("Per-app rules")
+            } footer: {
+                Text("A rule wins over your switch. Using the switch or shortcut in that app overrides it until you switch apps.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle(isOn: settings.offInGames) {
+                    Text("Turn off in games")
+                    Text("Apps that declare themselves as games. Add a rule for anything else, such as a video player.")
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func mode(for bundleID: String) -> Binding<AppRuleMode> {
+        Binding(
+            get: { store.settings.appRules.first { $0.bundleID == bundleID }?.mode ?? .always },
+            set: { mode in
+                if let index = store.settings.appRules.firstIndex(where: { $0.bundleID == bundleID }) {
+                    store.settings.appRules[index].mode = mode
+                }
+            }
+        )
+    }
+
+    private func addRule(bundleID: String, name: String) {
+        guard !store.settings.appRules.contains(where: { $0.bundleID == bundleID }) else { return }
+        store.settings.appRules.append(AppRule(bundleID: bundleID, name: name, mode: .always))
+    }
+
+    private func chooseApp() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Add"
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            guard let bundleID = Bundle(url: url)?.bundleIdentifier,
+                  bundleID != Bundle.main.bundleIdentifier else { continue }
+            addRule(bundleID: bundleID, name: AppInfo.displayName(at: url))
+        }
+    }
+}
+
+/// Looks up installed apps by bundle ID.
+@MainActor
+enum AppInfo {
+    static func url(for bundleID: String) -> URL? {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
+    }
+
+    static func isInstalled(_ bundleID: String) -> Bool {
+        url(for: bundleID) != nil
+    }
+
+    static func icon(for bundleID: String) -> NSImage {
+        if let url = url(for: bundleID) {
+            return NSWorkspace.shared.icon(forFile: url.path)
+        }
+        return NSWorkspace.shared.icon(for: .application)
+    }
+
+    static func displayName(at url: URL) -> String {
+        let name = FileManager.default.displayName(atPath: url.path)
+        return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+    }
+}
+
+// MARK: General
+
+struct GeneralSettings: View {
+    @ObservedObject var store: SettingsStore
+    @State private var launchAtLogin = LaunchAtLogin.isEnabled || LaunchAtLogin.needsApproval
+    @State private var launchNeedsApproval = LaunchAtLogin.needsApproval
+    @State private var launchError: String?
+
+    var body: some View {
+        Form {
+            Section {
                 Toggle("Open at login", isOn: Binding(
                     get: { launchAtLogin },
                     set: { newValue in
@@ -80,10 +260,6 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
-                HStack {
-                    Spacer()
-                    Button("Reset to Defaults") { store.resetToDefaults() }
-                }
             }
 
             Section("About") {
@@ -94,8 +270,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460)
-        .fixedSize(horizontal: false, vertical: true)
         .onAppear(perform: refreshLoginItem)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshLoginItem()
@@ -109,10 +283,6 @@ struct SettingsView: View {
         // Registered but awaiting approval still counts as on, so switching it
         // off unregisters Contrail and dismisses the note.
         launchAtLogin = LaunchAtLogin.isEnabled || launchNeedsApproval
-    }
-
-    private func followLabel(_ value: Double) -> String {
-        value >= 0.999 ? "Locked" : Formats.percent(value)
     }
 }
 
@@ -138,6 +308,7 @@ final class SettingsWindowController {
     func show() {
         if window == nil {
             let hosting = NSHostingController(rootView: SettingsView(store: store))
+            hosting.sizingOptions = [.preferredContentSize]
             let window = NSWindow(contentViewController: hosting)
             window.title = "Contrail Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
