@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 /// The Settings window: Appearance, Activation and General tabs.
 struct SettingsView: View {
     @ObservedObject var store: SettingsStore
+    @ObservedObject var updates: UpdateController
 
     var body: some View {
         TabView {
@@ -14,7 +15,7 @@ struct SettingsView: View {
                 .tabItem { Label("Appearance", systemImage: "paintbrush") }
             ActivationSettings(store: store)
                 .tabItem { Label("Activation", systemImage: "keyboard") }
-            GeneralSettings(store: store)
+            GeneralSettings(store: store, updates: updates)
                 .tabItem { Label("General", systemImage: "gearshape") }
         }
         // A fixed size that fits 1280×800 screens; each tab's form scrolls.
@@ -255,6 +256,7 @@ enum AppInfo {
 
 struct GeneralSettings: View {
     @ObservedObject var store: SettingsStore
+    @ObservedObject var updates: UpdateController
     @State private var launchAtLogin = LaunchAtLogin.isEnabled || LaunchAtLogin.needsApproval
     @State private var launchNeedsApproval = LaunchAtLogin.needsApproval
     @State private var launchError: String?
@@ -281,6 +283,21 @@ struct GeneralSettings: View {
                     Text(launchError)
                         .font(.caption)
                         .foregroundStyle(.red)
+                }
+            }
+
+            Section("Updates") {
+                Toggle("Automatically check for updates", isOn: $updates.automaticallyChecks)
+                    .disabled(!updates.isRunning)
+                HStack {
+                    Text(updates.isRunning
+                         ? "Updates are checked once a day and installed only when you choose."
+                         : "Development builds don't update themselves.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Check for Updates…", action: updates.checkForUpdates)
+                        .disabled(!updates.isRunning)
                 }
             }
 
@@ -325,15 +342,17 @@ extension Bundle {
 @MainActor
 final class SettingsWindowController {
     private let store: SettingsStore
+    private let updates: UpdateController
     private var window: NSWindow?
 
-    init(store: SettingsStore) {
+    init(store: SettingsStore, updates: UpdateController) {
         self.store = store
+        self.updates = updates
     }
 
     func show() {
         if window == nil {
-            let hosting = NSHostingController(rootView: SettingsView(store: store))
+            let hosting = NSHostingController(rootView: SettingsView(store: store, updates: updates))
             hosting.sizingOptions = [.preferredContentSize]
             let window = NSWindow(contentViewController: hosting)
             window.title = "Contrail Settings"

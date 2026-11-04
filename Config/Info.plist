@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the generated Info.plist. Holds only the keys Xcode can't
+     generate from build settings: Sparkle's update feed and signing key. -->
+<plist version="1.0">
+<dict>
+	<key>SUFeedURL</key>
+	<string>https://github.com/Kiril-P/contrail/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>odrt1covPnIdI/HPSy26DEy3eIwZHsMqKfrRhHn+fb0=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+</dict>
+</plist>

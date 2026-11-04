@@ -30,6 +30,7 @@ xcodebuild \
   ARCHS="arm64 x86_64" \
   ONLY_ACTIVE_ARCH=NO \
   MARKETING_VERSION="$VERSION" \
+  CURRENT_PROJECT_VERSION="$VERSION" \
   CODE_SIGN_IDENTITY=- \
   CODE_SIGN_STYLE=Manual \
   DEVELOPMENT_TEAM= \
@@ -42,9 +43,20 @@ if [[ ! -d "$APP" ]]; then
   exit 1
 fi
 
-# Re-sign the whole bundle ad hoc so the signature is consistent.
-codesign --force --deep --sign - "$APP"
-codesign --verify --strict --verbose=2 "$APP"
+# Re-sign ad hoc from the inside out, in the order Sparkle documents, so
+# every nested helper has a valid signature and the bundle seals over them.
+# (Sparkle refuses updates whose code signature is broken, even with a
+# valid EdDSA signature.)
+FW="$APP/Contents/Frameworks/Sparkle.framework"
+if [[ -d "$FW" ]]; then
+  codesign --force --sign - "$FW/Versions/B/XPCServices/Installer.xpc"
+  codesign --force --sign - --preserve-metadata=entitlements "$FW/Versions/B/XPCServices/Downloader.xpc"
+  codesign --force --sign - "$FW/Versions/B/Autoupdate"
+  codesign --force --sign - "$FW/Versions/B/Updater.app"
+  codesign --force --sign - "$FW"
+fi
+codesign --force --sign - "$APP"
+codesign --verify --deep --strict --verbose=2 "$APP"
 lipo -info "$APP/Contents/MacOS/Contrail"
 
 ZIP="$DIST/Contrail-$VERSION.zip"

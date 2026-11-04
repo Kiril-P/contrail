@@ -22,3 +22,16 @@ Logic that doesn't need AppKit (trail model, geometry, settings) belongs in `Pac
 - Keep pull requests small and focused, and explain the problem they solve.
 
 By contributing, you agree that your contributions are licensed under the GPL-3.0.
+
+## Releasing
+
+1. Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in the Xcode project.
+2. Tag `vX.Y.Z` and push the tag. The release workflow:
+   - builds the universal app
+   - signs it ad hoc from the inside out
+   - writes `appcast.xml`, signed with the `SPARKLE_ED_PRIVATE_KEY` secret
+   - fills in `packaging/contrail.rb`
+   - publishes everything as a GitHub release
+3. Run `scripts/update-tap.sh X.Y.Z` to publish the cask to `Kiril-P/homebrew-tap`.
+
+The Sparkle private key also lives in the maintainer's login keychain, under the account `contrail`. **Back it up.** Without it, existing installs can never be updated again.

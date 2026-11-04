@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		C0A000000000000000000010 /* ContrailCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0A000000000000000000011 /* ContrailCore */; };
 		C0A000000000000000000013 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = C0A000000000000000000014 /* KeyboardShortcuts */; };
+		C0A000000000000000000016 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C0A000000000000000000017 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 			files = (
 				C0A000000000000000000010 /* ContrailCore in Frameworks */,
 				C0A000000000000000000013 /* KeyboardShortcuts in Frameworks */,
+				C0A000000000000000000016 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,6 +76,7 @@
 			packageProductDependencies = (
 				C0A000000000000000000011 /* ContrailCore */,
 				C0A000000000000000000014 /* KeyboardShortcuts */,
+				C0A000000000000000000017 /* Sparkle */,
 			);
 			productName = Contrail;
 			productReference = C0A000000000000000000002 /* Contrail.app */;
@@ -106,6 +109,7 @@
 			packageReferences = (
 				C0A000000000000000000012 /* XCLocalSwiftPackageReference "Packages/ContrailCore" */,
 				C0A000000000000000000015 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
+				C0A000000000000000000018 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C0A000000000000000000005 /* Products */;
@@ -146,11 +150,12 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 0.4.0;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Contrail;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -159,7 +164,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "io.github.kiril-p.contrail";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -175,11 +180,12 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 0.4.0;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Contrail;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -188,7 +194,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "io.github.kiril-p.contrail";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -278,6 +284,14 @@
 				minimumVersion = 3.1.0;
 			};
 		};
+		C0A000000000000000000018 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -289,6 +303,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C0A000000000000000000015 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
 			productName = KeyboardShortcuts;
+		};
+		C0A000000000000000000017 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0A000000000000000000018 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

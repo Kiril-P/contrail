@@ -5,7 +5,9 @@ import AppKit
 /// When the trail is off, the contrail is drawn at 30% so the item still
 /// looks clickable.
 enum MenuBarIcon {
-    static func image(enabled: Bool) -> NSImage {
+    /// `badge` adds a small dot at the top left, shown when an update is
+    /// waiting.
+    static func image(enabled: Bool, badge: Bool = false) -> NSImage {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
             NSColor.black.setFill()
             pointer().fill()
@@ -19,10 +21,15 @@ enum MenuBarIcon {
             contrail().forEach { $0.fill() }
             context?.endTransparencyLayer()
             context?.restoreGState()
+            if badge {
+                NSColor.black.setFill()
+                NSBezierPath(ovalIn: NSRect(x: 1, y: 1, width: 5, height: 5)).fill()
+            }
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = enabled ? "Contrail, trail on" : "Contrail, trail off"
+        image.accessibilityDescription = (enabled ? "Contrail, trail on" : "Contrail, trail off")
+            + (badge ? ", update available" : "")
         return image
     }
 

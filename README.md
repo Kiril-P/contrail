@@ -14,11 +14,22 @@ Contrail draws a smooth, tapered neon trail behind the mouse pointer across ever
 
 ## Install
 
-1. Download the latest `Contrail-x.y.z.dmg` from [Releases](https://github.com/Kiril-P/contrail/releases) and drag **Contrail** into **Applications**.
-2. Open Contrail. Because the app isn't notarized yet, macOS says it can't verify it. Click **Done**.
-3. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to the Contrail message. Confirm with your password or Touch ID, then click **Open**.
+**Homebrew:**
+
+```sh
+brew install --cask Kiril-P/tap/contrail
+```
+
+**Or download** the latest `Contrail-x.y.z.dmg` from [Releases](https://github.com/Kiril-P/contrail/releases) and drag **Contrail** into **Applications**.
+
+Because the app isn't notarized yet, macOS blocks the first launch:
+
+1. Open Contrail. When macOS says it can't verify it, click **Done**.
+2. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to the Contrail message. Confirm with your password or Touch ID, then click **Open**.
 
 You only need to do this once. (On macOS 15 and later, Control-click → Open no longer skips this check.)
+
+**Updates:** Contrail checks for updates once a day ([Sparkle](https://sparkle-project.org)) and installs them when you choose. Updates are verified with Contrail's EdDSA signing key, so they install without another Gatekeeper prompt. You can turn checks off or check now in **Settings → General**.
 
 Requires macOS 13 Ventura or later, on Apple silicon or Intel.
 
@@ -73,6 +84,7 @@ Or from the command line:
 ```sh
 (cd Packages/ContrailCore && swift test)   # unit tests for the trail model
 scripts/build-release.sh                   # universal, ad-hoc signed .zip and .dmg in ./dist
+scripts/make-appcast.sh                    # signed Sparkle appcast for that zip (needs the signing key)
 ```
 
 ### How it works
@@ -102,7 +114,7 @@ Contrail.app/Contents/MacOS/Contrail --snapshot-presets presets.png
 - [x] **0.2**: customization (width, length, glow, taper, opacity, follow, hold), nine color presets, high-contrast mode for white backgrounds, live preview
 - [ ] Letter gestures: draw a letter with the cursor to open apps, run Shortcuts, press keys, and more
 - [x] **0.3**: click ripples, trail styles (Comet, Ribbon, Dotted, Sparks), toggle shortcut, hold-to-show, per-app rules
-- [ ] Auto-updates, Homebrew cask
+- [x] **0.4**: Looks, drag highlighting, auto-updates, Homebrew cask
 
 ## Contributing
 

@@ -7,9 +7,14 @@ struct ContrailApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuPopover(store: appDelegate.store, activation: appDelegate.activation, openSettings: appDelegate.showSettings)
+            MenuPopover(
+                store: appDelegate.store,
+                activation: appDelegate.activation,
+                updates: appDelegate.updates,
+                openSettings: appDelegate.showSettings
+            )
         } label: {
-            MenuBarLabel(activation: appDelegate.activation)
+            MenuBarLabel(activation: appDelegate.activation, updates: appDelegate.updates)
         }
         .menuBarExtraStyle(.window)
     }
@@ -17,9 +22,10 @@ struct ContrailApp: App {
 
 private struct MenuBarLabel: View {
     @ObservedObject var activation: ActivationController
+    @ObservedObject var updates: UpdateController
 
     var body: some View {
-        Image(nsImage: MenuBarIcon.image(enabled: activation.isOn))
+        Image(nsImage: MenuBarIcon.image(enabled: activation.isOn, badge: updates.availableVersion != nil))
     }
 }
 
@@ -27,8 +33,9 @@ private struct MenuBarLabel: View {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = SettingsStore()
     private(set) lazy var activation = ActivationController(store: store)
+    let updates = UpdateController()
     private var controller: TrailController?
-    private lazy var settingsWindow = SettingsWindowController(store: store)
+    private lazy var settingsWindow = SettingsWindowController(store: store, updates: updates)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         SnapshotRenderer.runIfRequested(store: store)
@@ -41,6 +48,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async {
             LookThumbnails.shared.prewarm(size: settings.lookSize, highContrast: settings.highContrast)
         }
+        #if !DEBUG
+        // Development builds share the bundle ID and feed; don't let them
+        // offer (or install) release builds over themselves.
+        updates.start()
+        #endif
     }
 
     func showSettings() {

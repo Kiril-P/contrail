@@ -16,6 +16,13 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | grep -v -i -E 'beta|rc' | sort -V | tail -1)"
 
+      - name: Check the tag
+        run: |
+          # Every release becomes "latest" and is offered to all users by the
+          # update feed, so only plain X.Y.Z tags may publish.
+          [[ "${GITHUB_REF_NAME#v}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::Release tags must look like vX.Y.Z (got $GITHUB_REF_NAME)"; exit 1; }
+
       - name: Core tests
         working-directory: Packages/ContrailCore
         run: swift test
@@ -23,10 +30,28 @@ jobs:
       - name: Build and package
         run: VERSION="${GITHUB_REF_NAME#v}" scripts/build-release.sh
 
+      - name: Sign the update feed
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          key="$RUNNER_TEMP/sparkle_ed_key"
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" > "$key"
+          trap 'rm -f "$key"' EXIT
+          SPARKLE_ED_KEY_FILE="$key" scripts/make-appcast.sh
+
+      - name: Fill in the Homebrew cask
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA="$(shasum -a 256 "dist/Contrail-$VERSION.dmg" | cut -d' ' -f1)"
+          sed -e "s/@VERSION@/$VERSION/" -e "s/@SHA256@/$SHA/" packaging/contrail.rb > dist/contrail.rb
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.dmg dist/SHA256SUMS.txt \
-            --title "Contrail ${GITHUB_REF_NAME#v}" \
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/Contrail-$VERSION.zip" "dist/Contrail-$VERSION.dmg" dist/SHA256SUMS.txt \
+            dist/appcast.xml dist/contrail.rb \
+            --title "Contrail $VERSION" \
             --notes-file .github/release-notes.md
