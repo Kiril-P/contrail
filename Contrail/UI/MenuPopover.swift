@@ -8,6 +8,7 @@ import SwiftUI
 struct MenuPopover: View {
     @ObservedObject var store: SettingsStore
     @ObservedObject var activation: ActivationController
+    @ObservedObject var updates: UpdateController
     let openSettings: () -> Void
 
     private var settings: Binding<TrailSettings> { $store.settings }
@@ -15,6 +16,21 @@ struct MenuPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
+
+            if let version = updates.availableVersion {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .foregroundStyle(Color.accentColor)
+                    Text("Contrail \(version) is available")
+                        .lineLimit(1)
+                    Spacer()
+                    Button("Install…", action: updates.checkForUpdates)
+                        .controlSize(.small)
+                }
+                .font(.callout)
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.accentColor.opacity(0.12)))
+            }
 
             LooksPicker(store: store, columns: 2, openSettings: openSettings)
 

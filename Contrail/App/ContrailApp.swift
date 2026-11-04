@@ -7,7 +7,12 @@ struct ContrailApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuPopover(store: appDelegate.store, activation: appDelegate.activation, openSettings: appDelegate.showSettings)
+            MenuPopover(
+                store: appDelegate.store,
+                activation: appDelegate.activation,
+                updates: appDelegate.updates,
+                openSettings: appDelegate.showSettings
+            )
         } label: {
             MenuBarLabel(activation: appDelegate.activation)
         }
@@ -27,14 +32,16 @@ private struct MenuBarLabel: View {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = SettingsStore()
     private(set) lazy var activation = ActivationController(store: store)
+    let updates = UpdateController()
     private var controller: TrailController?
-    private lazy var settingsWindow = SettingsWindowController(store: store)
+    private lazy var settingsWindow = SettingsWindowController(store: store, updates: updates)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         SnapshotRenderer.runIfRequested(store: store)
         let controller = TrailController(store: store, activation: activation)
         controller.start()
         self.controller = controller
+        updates.start()
     }
 
     func showSettings() {
