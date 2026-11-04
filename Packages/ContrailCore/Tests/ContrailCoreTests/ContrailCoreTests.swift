@@ -547,6 +547,35 @@ import Testing
         #expect(LookSelection(s).look == nil)
     }
 
+    @Test func baseLookFollowsWhateverLookIsMatched() {
+        var s = TrailSettings()
+        Look.look(id: "neon")!.apply(to: &s, size: .medium)
+        // Tweak by hand until the values are exactly Whisper's.
+        let whisper = Look.look(id: "whisper")!
+        s.presetID = whisper.presetID; s.width = whisper.width; s.length = whisper.length
+        s.glow = whisper.glow; s.taper = whisper.taper; s.followSpeed = whisper.followSpeed
+        s.opacity = whisper.opacity
+        s = s.reconcilingBaseLook()
+        #expect(s.baseLookID == "whisper")
+        s.glow = 0.9
+        #expect(LookSelection(s.reconcilingBaseLook()) == .custom(base: whisper))
+    }
+
+    @Test func customKeepsItsSizeForReset() {
+        var s = TrailSettings()
+        let neon = Look.look(id: "neon")!
+        neon.apply(to: &s, size: .large)
+        s.glow = 0.2
+        #expect(s.lookSize == .large)
+        neon.apply(to: &s, size: s.lookSize)
+        #expect(LookSelection(s) == .look(neon, .large))
+    }
+
+    @Test func migratedDefaultsGainTheirBaseLook() throws {
+        let s = try JSONDecoder().decode(TrailSettings.self, from: "{}".data(using: .utf8)!)
+        #expect(s.reconcilingBaseLook().baseLookID == "neon")
+    }
+
     @Test func oldSettingsDecodeWithoutABaseLook() throws {
         let json = #"{"width": 12, "presetID": "lime"}"#.data(using: .utf8)!
         let s = try JSONDecoder().decode(TrailSettings.self, from: json)
