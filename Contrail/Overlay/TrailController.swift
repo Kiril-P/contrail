@@ -53,7 +53,7 @@ final class TrailController {
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.engine.reset() }
+            MainActor.assumeIsolated { self?.resetTrail() }
         })
 
         store.$settings
@@ -68,11 +68,12 @@ final class TrailController {
     private func setEnabled(_ enabled: Bool) {
         if enabled {
             for overlay in overlays { overlay.panel.orderFrontRegardless() }
+            restingCursor = NSEvent.mouseLocation
             // @Published emits before the new value is stored, so pass it on.
             wake(enabled: true)
         } else {
             sleep()
-            engine.reset()
+            resetTrail()
             ripples.removeAll()
             particles.removeAll()
             frameContent = .empty
@@ -94,7 +95,7 @@ final class TrailController {
         }
         overlays.removeAll()
         isActive = false
-        engine.reset()
+        resetTrail()
 
         for screen in NSScreen.screens {
             let panel = OverlayPanel(screen: screen)
@@ -160,6 +161,13 @@ final class TrailController {
         for overlay in overlays { overlay.driver.start() }
     }
 
+    /// Clears the trail and treats the cursor's current position as "at
+    /// rest", so the next frame doesn't turn a still cursor into a dot.
+    private func resetTrail() {
+        engine.reset()
+        restingCursor = NSEvent.mouseLocation
+    }
+
     private func sleep() {
         isActive = false
         restingCursor = NSEvent.mouseLocation
@@ -178,9 +186,10 @@ final class TrailController {
             let dt = now - lastUpdate
             lastUpdate = now
             let cursor = NSEvent.mouseLocation
-            if engine.isEmpty, cursor == restingCursor {
-                // Woken by a click, not by movement: don't start a trail.
-            } else {
+            // After a reset (sleep, wake, enable, screen change), don't start
+            // a trail until the cursor actually moves; a click alone only
+            // shows its ripple.
+            if !(engine.isEmpty && cursor == restingCursor) {
                 restingCursor = nil
                 engine.update(cursor: cursor, now: now, settings: settings)
             }
@@ -229,7 +238,7 @@ final class TrailController {
         }
         if overlays.allSatisfy(\.view.isClear) {
             sleep()
-            engine.reset()
+            resetTrail()
         }
     }
 }
