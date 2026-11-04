@@ -10,14 +10,20 @@ final class SettingsStore: ObservableObject {
 
     @Published var settings: TrailSettings {
         didSet {
+            // Writing the normalized value re-enters this observer (through
+            // @Published); the flag makes that a no-op so each change saves once.
+            guard !isNormalizing else { return }
             let normalized = settings.clamped().reconcilingBaseLook()
             if normalized != settings {
-                // Assigning inside didSet doesn't re-run didSet, so save here.
+                isNormalizing = true
                 settings = normalized
+                isNormalizing = false
             }
             if oldValue != settings { save() }
         }
     }
+
+    private var isNormalizing = false
 
     private let defaults: UserDefaults
 
