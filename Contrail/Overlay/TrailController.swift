@@ -199,7 +199,8 @@ final class TrailController {
     /// Mouse events carry the modifier state, so no keyboard monitoring (and
     /// no permission) is needed.
     private func moved(flags: NSEvent.ModifierFlags) {
-        guard store.settings.holdModifier.isSatisfied(by: flags) else { return }
+        // A held ring always wakes, so it can follow or be released.
+        guard ripples.isHolding || store.settings.holdModifier.isSatisfied(by: flags) else { return }
         wake()
     }
 
@@ -355,7 +356,9 @@ final class TrailController {
         // A button held still: once its ring has settled the picture stops
         // changing, so pause drawing and keep that frame on screen. Moving
         // (drag monitor) or letting go (mouse-up monitors) wakes us again.
-        if engine.isEmpty && particles.isEmpty && ripples.isSettled(now: now) {
+        // Not with a hold key: letting go of it sends no mouse event, so we
+        // keep drawing to notice it and release the ring.
+        if settings.holdModifier == .none, engine.isEmpty, particles.isEmpty, ripples.isSettled(now: now) {
             sleep()
             return
         }

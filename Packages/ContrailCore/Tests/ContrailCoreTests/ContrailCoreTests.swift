@@ -212,14 +212,16 @@ import Testing
     }
 
     @Test func releaseContinuesFromTheHeldRing() {
-        for reduceMotion in [false, true] {
+        // A long hold and a 20 ms click (ring still fading in).
+        for (reduceMotion, at) in [(false, 0.3), (true, 0.3), (false, 0.02)] {
             var system = RippleSystem()
             system.press(at: .zero, time: 0, color: cyan)
-            let held = system.instances(now: 0.3, size: 56, reduceMotion: reduceMotion)[0]
-            system.release(at: nil, time: 0.3, reduceMotion: reduceMotion)
-            let out = system.instances(now: 0.3, size: 56, reduceMotion: reduceMotion)[0]
-            #expect(abs(out.radius - held.radius) < 0.01, "reduceMotion \(reduceMotion)")
+            let held = system.instances(now: at, size: 56, reduceMotion: reduceMotion)[0]
+            system.release(at: nil, time: at, reduceMotion: reduceMotion)
+            let out = system.instances(now: at, size: 56, reduceMotion: reduceMotion)[0]
+            #expect(abs(out.radius - held.radius) < 0.01, "reduceMotion \(reduceMotion) at \(at)")
             #expect(abs(out.fill - held.fill) < 0.01)
+            #expect(abs(out.alpha - held.alpha) < 0.01)
         }
     }
 

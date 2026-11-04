@@ -55,6 +55,8 @@ public struct RippleSystem: Sendable {
         var fromFill: Double
         /// Released from a held ring: with Reduce Motion it keeps that size.
         var fromHeld: Bool
+        /// Opacity the ripple starts from (a held ring may still be fading in).
+        var fromAlpha: Double = 1
     }
 
     /// The ring under a held button.
@@ -121,7 +123,8 @@ public struct RippleSystem: Sendable {
             fromGrowth: Self.growth(of: ring, at: time, reduceMotion: reduceMotion)
                 * Self.breath(of: ring, at: time, reduceMotion: reduceMotion),
             fromFill: Self.fill(of: ring, at: time, reduceMotion: reduceMotion),
-            fromHeld: true
+            fromHeld: true,
+            fromAlpha: Self.alpha(of: ring, at: time)
         ))
     }
 
@@ -152,19 +155,18 @@ public struct RippleSystem: Sendable {
             guard t >= 0, t < 1 else { return nil }
             return Self.instance(
                 center: ripple.center, color: ripple.color, progress: t, size: size,
-                fromGrowth: ripple.fromGrowth, fromFill: ripple.fromFill,
+                fromGrowth: ripple.fromGrowth, fromFill: ripple.fromFill, fromAlpha: ripple.fromAlpha,
                 keepSize: reduceMotion && ripple.fromHeld, reduceMotion: reduceMotion
             )
         }
         if let ring = held {
-            let age = max(now - ring.start, 0)
             let growth = Self.growth(of: ring, at: now, reduceMotion: reduceMotion)
                 * Self.breath(of: ring, at: now, reduceMotion: reduceMotion)
             result.append(RippleInstance(
                 center: SIMD2(Float(ring.center.x), Float(ring.center.y)),
                 radius: Float(size / 2 * growth),
                 width: 2.5,
-                alpha: Float(min(age / 0.05, 1) * 0.95),
+                alpha: Float(Self.alpha(of: ring, at: now)),
                 fill: Float(Self.fill(of: ring, at: now, reduceMotion: reduceMotion)),
                 color: Self.color(of: ring, at: now).simd
             ))
@@ -203,6 +205,11 @@ public struct RippleSystem: Sendable {
         return 0.12 * (1 - min(max((time - start) / colorShiftTime, 0), 1))
     }
 
+    /// A held ring fades in quickly, to just below full strength.
+    private static func alpha(of ring: Held, at time: Double) -> Double {
+        min(max(time - ring.start, 0) / 0.05, 1) * 0.95
+    }
+
     private static func color(of ring: Held, at time: Double) -> TrailColor {
         guard let target = ring.dragColor, let start = ring.dragStart else { return ring.color }
         return ring.color.mixed(with: target, by: Float(min(max((time - start) / colorShiftTime, 0), 1)))
@@ -211,12 +218,12 @@ public struct RippleSystem: Sendable {
     /// A releasing ring's shape at `progress` (0…1) through its life.
     static func instance(
         center: CGPoint, color: TrailColor, progress t: Double, size: Double,
-        fromGrowth: Double = 0.2, fromFill: Double = 0.2, keepSize: Bool = false, reduceMotion: Bool
+        fromGrowth: Double = 0.2, fromFill: Double = 0.2, fromAlpha: Double = 1, keepSize: Bool = false, reduceMotion: Bool
     ) -> RippleInstance {
         let growth = keepSize ? fromGrowth : reduceMotion ? 1 : fromGrowth + (1 - fromGrowth) * easeOut(t)
         let radius = size / 2 * growth
         let width = 2.5 + (1 - 2.5) * t
-        let alpha = pow(1 - t, 1.5)
+        let alpha = fromAlpha * pow(1 - t, 1.5)
         // The press disc fades out over the first 30%.
         let fill = reduceMotion ? 0 : fromFill * (1 - min(t / 0.3, 1))
         return RippleInstance(
