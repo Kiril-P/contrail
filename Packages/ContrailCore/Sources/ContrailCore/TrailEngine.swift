@@ -42,6 +42,10 @@ public struct TrailEngine: Sendable {
     static let minSampleSpacing: CGFloat = 0.2
     /// Largest frame gap the clock will advance by; avoids jumps after a stall.
     static let maxStep: Double = 0.1
+    /// How long the cursor must report no movement before it counts as
+    /// stopped. Displays often refresh faster than the mouse reports, so a
+    /// single unchanged frame is not a stop.
+    static let stopGrace: Double = 0.08
 
     public private(set) var samples: [TrailSample] = []
     public private(set) var clock: Double = 0
@@ -86,7 +90,10 @@ public struct TrailEngine: Sendable {
         } else if stillSince == nil {
             stillSince = now
         }
-        let lingering = stillSince.map { now - $0 < settings.linger } ?? false
+        let lingering = stillSince.map {
+            let stillFor = now - $0
+            return stillFor >= Self.stopGrace && stillFor < Self.stopGrace + settings.linger
+        } ?? false
         if !lingering {
             clock += dt
         }

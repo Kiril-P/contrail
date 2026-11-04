@@ -12,8 +12,8 @@ final class SettingsStore: ObservableObject {
         didSet {
             let clamped = settings.clamped()
             if clamped != settings {
+                // Assigning inside didSet doesn't re-run didSet, so save here.
                 settings = clamped
-                return
             }
             if oldValue != settings { save() }
         }

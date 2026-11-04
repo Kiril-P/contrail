@@ -33,12 +33,38 @@ import Testing
             engine.update(cursor: CGPoint(x: Double(i) * 10, y: 0), now: now, settings: lingering)
             now += 1 / 60
         }
-        let before = engine.visiblePoints(length: lingering.length).count
+        // The hold starts once the cursor has been still for the grace period.
+        for _ in 0..<6 {
+            engine.update(cursor: CGPoint(x: 290, y: 0), now: now, settings: lingering)
+            now += 1 / 60
+        }
+        let before = engine.visiblePoints(length: lingering.length)
         for _ in 0..<60 {
             engine.update(cursor: CGPoint(x: 290, y: 0), now: now, settings: lingering)
             now += 1 / 60
         }
-        #expect(engine.visiblePoints(length: lingering.length).count == before)
+        #expect(engine.visiblePoints(length: lingering.length) == before)
+    }
+
+    /// A 120 Hz display with a 60 Hz mouse sees an unchanged position every
+    /// other frame. That must not count as a stop, or Hold would stretch the trail.
+    @Test func holdDoesNotDependOnDisplayRate() {
+        func visibleLength(linger: Double) -> CGFloat {
+            var s = settings
+            s.linger = linger
+            var engine = TrailEngine()
+            var x = 0.0
+            for frame in 0..<240 {
+                if frame % 2 == 0 { x += 10 }
+                engine.update(cursor: CGPoint(x: x, y: 0), now: Double(frame) / 120, settings: s)
+            }
+            let points = engine.visiblePoints(length: s.length)
+            return (points.last?.point.x ?? 0) - (points.first?.point.x ?? 0)
+        }
+        let withoutHold = visibleLength(linger: 0)
+        let withHold = visibleLength(linger: 0.5)
+        #expect(withoutHold > 200)
+        #expect(abs(withHold - withoutHold) < 15)
     }
 
     @Test func teleportStartsNewStroke() {
@@ -84,7 +110,8 @@ import Testing
     @Test func taperNarrowsTowardTail() {
         let s = TrailSettings(width: 10, taper: 1)
         #expect(TrailGeometry.radius(age: 0, settings: s) == 5)
-        #expect(TrailGeometry.radius(age: 1, settings: s) < 0.5)
+        #expect(TrailGeometry.radius(age: 1, settings: s) <= 0.25)
+        #expect(TrailGeometry.radius(age: 0.5, settings: s) > TrailGeometry.radius(age: 0.9, settings: s))
         let uniform = TrailSettings(width: 10, taper: 0)
         #expect(TrailGeometry.radius(age: 1, settings: uniform) == 5)
     }
@@ -96,6 +123,30 @@ import Testing
         )
         #expect(segments.count == 1)
         #expect(segments[0].p0 == segments[0].p1)
+    }
+
+    @Test func strokeEndsWithRoundHead() {
+        let points = [
+            TrailPoint(point: CGPoint(x: 0, y: 0), age: 1, startsStroke: true),
+            TrailPoint(point: CGPoint(x: 0.3, y: 0), age: 0.5, startsStroke: false),
+            TrailPoint(point: CGPoint(x: 0.6, y: 0), age: 0, startsStroke: false),
+        ]
+        let segments = TrailGeometry.segments(for: points, settings: .default)
+        let head = segments.last!
+        #expect(head.p0 == head.p1)
+        #expect(head.p0 == SIMD2<Float>(0.6, 0))
+        #expect(head.u0 == 0 && head.r0 == TrailGeometry.radius(age: 0, settings: .default))
+    }
+
+    @Test func everyStrokeGetsItsOwnHead() {
+        let points = [
+            TrailPoint(point: CGPoint(x: 0, y: 0), age: 1, startsStroke: true),
+            TrailPoint(point: CGPoint(x: 5, y: 0), age: 0.6, startsStroke: false),
+            TrailPoint(point: CGPoint(x: 900, y: 0), age: 0.4, startsStroke: true),
+            TrailPoint(point: CGPoint(x: 905, y: 0), age: 0, startsStroke: false),
+        ]
+        let dots = TrailGeometry.segments(for: points, settings: .default).filter { $0.p0 == $0.p1 }
+        #expect(dots.map(\.p0) == [SIMD2<Float>(5, 0), SIMD2<Float>(905, 0)])
     }
 
     @Test func segmentLayoutMatchesShader() {
@@ -126,13 +177,13 @@ import Testing
     }
 
     @Test func roundTrips() throws {
-        let s = TrailSettings(presetID: "ember", width: 11, highContrast: true)
+        let s = TrailSettings(presetID: "sunset", width: 11, highContrast: true)
         let data = try JSONEncoder().encode(s)
         #expect(try JSONDecoder().decode(TrailSettings.self, from: data) == s)
     }
 
     @Test func gradientInterpolates() {
-        let preset = ColorPreset(id: "t", name: "T", stops: [RGBColor(red: 0, green: 0, blue: 0), RGBColor(red: 1, green: 1, blue: 1)])
+        let preset = ColorPreset(id: "t", name: "T", stops: [TrailColor(red: 0, green: 0, blue: 0), TrailColor(red: 1, green: 1, blue: 1)])
         #expect(preset.color(at: 0.5).red == 0.5)
         #expect(preset.color(at: 2).red == 1)
     }

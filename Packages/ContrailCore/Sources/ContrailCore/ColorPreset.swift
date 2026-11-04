@@ -1,7 +1,7 @@
 import Foundation
 
 /// A linear (non-premultiplied) sRGB color.
-public struct RGBColor: Equatable, Sendable {
+public struct TrailColor: Equatable, Sendable {
     public var red: Float
     public var green: Float
     public var blue: Float
@@ -29,9 +29,9 @@ public struct ColorPreset: Identifiable, Equatable, Sendable {
 
     public let id: String
     public let name: String
-    public let stops: [RGBColor]
+    public let stops: [TrailColor]
 
-    public init(id: String, name: String, stops: [RGBColor]) {
+    public init(id: String, name: String, stops: [TrailColor]) {
         precondition(!stops.isEmpty && stops.count <= Self.maxStops)
         self.id = id
         self.name = name
@@ -41,31 +41,32 @@ public struct ColorPreset: Identifiable, Equatable, Sendable {
     public var isGradient: Bool { stops.count > 1 }
 
     /// Color at a position along the trail, 0 = head, 1 = tail.
-    public func color(at t: Double) -> RGBColor {
+    public func color(at t: Double) -> TrailColor {
         guard stops.count > 1 else { return stops[0] }
         let position = Float(min(max(t, 0), 1)) * Float(stops.count - 1)
         let index = min(Int(position), stops.count - 2)
         let f = position - Float(index)
         let a = stops[index], b = stops[index + 1]
-        return RGBColor(
+        return TrailColor(
             red: a.red + (b.red - a.red) * f,
             green: a.green + (b.green - a.green) * f,
             blue: a.blue + (b.blue - a.blue) * f
         )
     }
 
-    public static let defaultID = "violet"
+    public static let defaultID = "cyan"
 
+    /// The built-in palette, in swatch order. Gradient stops run head → tail.
     public static let all: [ColorPreset] = [
-        ColorPreset(id: "violet", name: "Violet", stops: [RGBColor(hex: 0x9B6BFF)]),
-        ColorPreset(id: "cyan", name: "Cyan", stops: [RGBColor(hex: 0x22D3EE)]),
-        ColorPreset(id: "magenta", name: "Magenta", stops: [RGBColor(hex: 0xF43FBF)]),
-        ColorPreset(id: "lime", name: "Lime", stops: [RGBColor(hex: 0xA3E635)]),
-        ColorPreset(id: "amber", name: "Amber", stops: [RGBColor(hex: 0xFBBF24)]),
-        ColorPreset(id: "coral", name: "Coral", stops: [RGBColor(hex: 0xFF6B6B)]),
-        ColorPreset(id: "ice", name: "Ice", stops: [RGBColor(hex: 0xE6F4FF)]),
-        ColorPreset(id: "ember", name: "Ember", stops: [RGBColor(hex: 0xFFB020), RGBColor(hex: 0xFF3D7F)]),
-        ColorPreset(id: "aurora", name: "Aurora", stops: [RGBColor(hex: 0x2DD4BF), RGBColor(hex: 0x3B82F6), RGBColor(hex: 0xA855F7)]),
+        ColorPreset(id: "cyan", name: "Cyan", stops: [TrailColor(hex: 0x28DCFF)]),
+        ColorPreset(id: "violet", name: "Violet", stops: [TrailColor(hex: 0x9B6BFF)]),
+        ColorPreset(id: "magenta", name: "Magenta", stops: [TrailColor(hex: 0xFF3FCB)]),
+        ColorPreset(id: "coral", name: "Coral", stops: [TrailColor(hex: 0xFF6B73)]),
+        ColorPreset(id: "amber", name: "Amber", stops: [TrailColor(hex: 0xFFB52E)]),
+        ColorPreset(id: "lime", name: "Lime", stops: [TrailColor(hex: 0xB7FF38)]),
+        ColorPreset(id: "ice", name: "Ice", stops: [TrailColor(hex: 0xBCDFFF)]),
+        ColorPreset(id: "sunset", name: "Sunset", stops: [TrailColor(hex: 0xFF4FAD), TrailColor(hex: 0xFF6B73), TrailColor(hex: 0xFFB52E)]),
+        ColorPreset(id: "aurora", name: "Aurora", stops: [TrailColor(hex: 0x2EF2C2), TrailColor(hex: 0x3D8BFF), TrailColor(hex: 0x9B6BFF)]),
     ]
 
     public static var `default`: ColorPreset { preset(id: defaultID)! }

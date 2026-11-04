@@ -13,11 +13,9 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     public var width: Double
     /// How many seconds of motion the trail shows.
     public var length: Double
-    /// Glow falloff radius beyond the core, in points.
-    public var glowRadius: Double
-    /// Glow brightness, 0…1.
-    public var glowIntensity: Double
-    /// 0 = uniform width, 1 = tail narrows to a point.
+    /// Glow strength, 0…1. The halo's size follows the width.
+    public var glow: Double
+    /// 0 = uniform width, 1 = tail narrows sharply to a hairline.
     public var taper: Double
     /// 0 = floaty and smooth, 1 = locked to the cursor.
     public var followSpeed: Double
@@ -28,9 +26,8 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     /// Opaque matte stroke with a dark outline, readable on white backgrounds.
     public var highContrast: Bool
 
-    public static let widthRange: ClosedRange<Double> = 1...24
-    public static let lengthRange: ClosedRange<Double> = 0.1...2
-    public static let glowRadiusRange: ClosedRange<Double> = 0...40
+    public static let widthRange: ClosedRange<Double> = 2...20
+    public static let lengthRange: ClosedRange<Double> = 0.15...1.5
     public static let unitRange: ClosedRange<Double> = 0...1
     public static let lingerRange: ClosedRange<Double> = 0...3
     public static let opacityRange: ClosedRange<Double> = 0.2...1
@@ -40,14 +37,13 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     public init(
         isEnabled: Bool = true,
         presetID: String = ColorPreset.defaultID,
-        width: Double = 6,
-        length: Double = 0.35,
-        glowRadius: Double = 14,
-        glowIntensity: Double = 0.6,
-        taper: Double = 0.85,
+        width: Double = 7,
+        length: Double = 0.5,
+        glow: Double = 0.7,
+        taper: Double = 0.5,
         followSpeed: Double = 0.8,
         linger: Double = 0,
-        opacity: Double = 0.95,
+        opacity: Double = 1,
         highContrast: Bool = false
     ) {
         self.version = Self.currentVersion
@@ -55,8 +51,7 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.presetID = presetID
         self.width = width
         self.length = length
-        self.glowRadius = glowRadius
-        self.glowIntensity = glowIntensity
+        self.glow = glow
         self.taper = taper
         self.followSpeed = followSpeed
         self.linger = linger
@@ -70,8 +65,7 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         copy.version = Self.currentVersion
         copy.width = width.clamped(to: Self.widthRange)
         copy.length = length.clamped(to: Self.lengthRange)
-        copy.glowRadius = glowRadius.clamped(to: Self.glowRadiusRange)
-        copy.glowIntensity = glowIntensity.clamped(to: Self.unitRange)
+        copy.glow = glow.clamped(to: Self.unitRange)
         copy.taper = taper.clamped(to: Self.unitRange)
         copy.followSpeed = followSpeed.clamped(to: Self.unitRange)
         copy.linger = linger.clamped(to: Self.lingerRange)
@@ -88,7 +82,7 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, isEnabled, presetID, width, length, glowRadius, glowIntensity
+        case version, isEnabled, presetID, width, length, glow
         case taper, followSpeed, linger, opacity, highContrast
     }
 
@@ -100,8 +94,7 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.presetID = (try? c.decodeIfPresent(String.self, forKey: .presetID)) ?? d.presetID
         self.width = (try? c.decodeIfPresent(Double.self, forKey: .width)) ?? d.width
         self.length = (try? c.decodeIfPresent(Double.self, forKey: .length)) ?? d.length
-        self.glowRadius = (try? c.decodeIfPresent(Double.self, forKey: .glowRadius)) ?? d.glowRadius
-        self.glowIntensity = (try? c.decodeIfPresent(Double.self, forKey: .glowIntensity)) ?? d.glowIntensity
+        self.glow = (try? c.decodeIfPresent(Double.self, forKey: .glow)) ?? d.glow
         self.taper = (try? c.decodeIfPresent(Double.self, forKey: .taper)) ?? d.taper
         self.followSpeed = (try? c.decodeIfPresent(Double.self, forKey: .followSpeed)) ?? d.followSpeed
         self.linger = (try? c.decodeIfPresent(Double.self, forKey: .linger)) ?? d.linger

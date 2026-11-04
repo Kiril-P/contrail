@@ -51,7 +51,36 @@ final class TrailLayerView: NSView {
         if segments.isEmpty && isClear { return }
         let scale = metalLayer.contentsScale
         let uniforms = TrailUniforms(viewSize: bounds.size, origin: origin, scale: scale, settings: settings)
-        renderer.draw(segments, uniforms: uniforms, into: metalLayer)
-        isClear = segments.isEmpty
+        guard metalLayer.isHidden else {
+            if renderer.draw(segments, uniforms: uniforms, into: metalLayer) {
+                isClear = segments.isEmpty
+            }
+            return
+        }
+
+        // Showing a hidden layer: present the fresh frame inside the same Core
+        // Animation transaction that unhides the layer, so the stale content
+        // underneath can never appear, however busy the GPU is.
+        metalLayer.presentsWithTransaction = true
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if renderer.draw(segments, uniforms: uniforms, into: metalLayer, inTransaction: true) {
+            isClear = segments.isEmpty
+            metalLayer.isHidden = false
+        }
+        CATransaction.commit()
+        metalLayer.presentsWithTransaction = false
+    }
+
+    /// Hides whatever this view last presented without asking the GPU for a
+    /// drawable, which can block for up to a second on a display that isn't
+    /// presenting (standby, mirroring). The next successful draw shows it again.
+    func hideStaleContent() {
+        guard !isClear else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        metalLayer.isHidden = true
+        CATransaction.commit()
+        isClear = true
     }
 }

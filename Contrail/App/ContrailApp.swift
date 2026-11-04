@@ -7,10 +7,19 @@ struct ContrailApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContent(store: appDelegate.store)
+            MenuPopover(store: appDelegate.store, openSettings: appDelegate.showSettings)
         } label: {
-            Image(systemName: "scribble.variable")
+            MenuBarLabel(store: appDelegate.store)
         }
+        .menuBarExtraStyle(.window)
+    }
+}
+
+private struct MenuBarLabel: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        Image(nsImage: MenuBarIcon.image(enabled: store.settings.isEnabled))
     }
 }
 
@@ -18,23 +27,16 @@ struct ContrailApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = SettingsStore()
     private var controller: TrailController?
+    private lazy var settingsWindow = SettingsWindowController(store: store)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        SnapshotRenderer.runIfRequested()
+        SnapshotRenderer.runIfRequested(store: store)
         let controller = TrailController(store: store)
         controller.start()
         self.controller = controller
     }
-}
 
-private struct MenuContent: View {
-    @ObservedObject var store: SettingsStore
-
-    var body: some View {
-        Toggle("Show Trail", isOn: $store.settings.isEnabled)
-            .keyboardShortcut("t")
-        Divider()
-        Button("Quit Contrail") { NSApp.terminate(nil) }
-            .keyboardShortcut("q")
+    func showSettings() {
+        settingsWindow.show()
     }
 }

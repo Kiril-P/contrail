@@ -34,7 +34,9 @@ public struct TrailSegment: Equatable, Sendable {
 }
 
 public enum TrailGeometry {
-    /// Distance between interpolated points along the curve, in points.
+    /// Distance between interpolated points along the curve, in points. Keep
+    /// it small: each capsule's round caps hold their endpoint's age, and
+    /// wider spacing makes the steps visible as beads in the glow.
     public static let spacing: CGFloat = 2.5
     /// Upper bound on subdivisions between two samples.
     public static let maxSubdivisions = 24
@@ -56,11 +58,14 @@ public enum TrailGeometry {
         return segments
     }
 
-    /// Half width of the trail core at a given age.
+    /// Half width of the trail core at a given age. The body stays full for
+    /// most of its length and narrows to a hairline at the very end.
     public static func radius(age: Double, settings: TrailSettings) -> Float {
         let taper = min(max(settings.taper, 0), 1)
-        let factor = 1 - taper * pow(min(max(age, 0), 1), 0.9)
-        return Float(max(settings.width * 0.5 * factor, 0.15))
+        let exponent = 1.3 * taper
+        let remaining = 1 - min(max(age, 0), 1)
+        let factor = exponent > 0 ? max(0.05, pow(remaining, exponent)) : 1
+        return Float(max(settings.width * 0.5 * factor, 0.1))
     }
 
     private static func appendStroke(_ stroke: ArraySlice<TrailPoint>, settings: TrailSettings, into segments: inout [TrailSegment]) {
@@ -104,6 +109,18 @@ public enum TrailGeometry {
                 previous = point
                 previousAge = age
             }
+        }
+
+        // A zero-length capsule at the head. Each capsule blends from its older
+        // to its newer end across its own length, and on slow movement that is
+        // a fraction of a point, a sharp step across the whole halo. Every
+        // other capsule's step is covered by the round cap of the capsule ahead
+        // of it; this gives the newest one the same cover.
+        if let head = pts.last {
+            let p = SIMD2<Float>(Float(head.point.x), Float(head.point.y))
+            let r = radius(age: head.age, settings: settings)
+            let u = Float(head.age)
+            segments.append(TrailSegment(p0: p, p1: p, r0: r, r1: r, u0: u, u1: u))
         }
     }
 

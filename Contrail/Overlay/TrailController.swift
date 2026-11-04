@@ -27,6 +27,8 @@ final class TrailController {
     private var segments: [TrailSegment] = []
     private var lastUpdate: CFTimeInterval = 0
     private var isActive = false
+    /// When the trail last became empty.
+    private var emptySince: CFTimeInterval?
 
     init(store: SettingsStore) {
         self.store = store
@@ -60,13 +62,16 @@ final class TrailController {
     private func setEnabled(_ enabled: Bool) {
         if enabled {
             for overlay in overlays { overlay.panel.orderFrontRegardless() }
-            wake()
+            // @Published emits before the new value is stored, so pass it on.
+            wake(enabled: true)
         } else {
             sleep()
             engine.reset()
             segments = []
             for overlay in overlays {
-                overlay.view.render([], origin: overlay.panel.frame.origin, settings: store.settings)
+                // Hide rather than draw a clear frame: drawing can block on a
+                // display in standby.
+                overlay.view.hideStaleContent()
                 overlay.panel.orderOut(nil)
             }
         }
@@ -120,9 +125,10 @@ final class TrailController {
     }
 
     /// Starts every display link if the trail is enabled and currently idle.
-    private func wake() {
-        guard store.settings.isEnabled, !isActive else { return }
+    private func wake(enabled: Bool? = nil) {
+        guard enabled ?? store.settings.isEnabled, !isActive else { return }
         isActive = true
+        emptySince = nil
         for overlay in overlays { overlay.driver.start() }
     }
 
@@ -148,12 +154,29 @@ final class TrailController {
 
         guard let overlay = overlays.first(where: { $0.view === view }) else { return }
         let frame = overlay.panel.frame
-        let margin = CGFloat(settings.width + settings.glowRadius + 12)
+        // The wide glow lobe reaches ~4× the width beyond the core.
+        let margin = CGFloat(settings.width * 4.5 + 12)
         let visibleRect = frame.insetBy(dx: -margin, dy: -margin)
         let onScreen = segments.filter { $0.bounds.intersects(visibleRect) }
         view.render(onScreen, origin: frame.origin, settings: settings)
 
-        if engine.isEmpty && overlays.allSatisfy(\.view.isClear) {
+        guard engine.isEmpty else {
+            emptySince = nil
+            return
+        }
+        let emptyFor = now - (emptySince ?? now)
+        if emptySince == nil { emptySince = now }
+
+        // Screens normally clear themselves on their next tick. If one hasn't
+        // after 0.1 s, its display link has probably stopped (standby,
+        // mirroring): hide its stale content instead of drawing, so nothing
+        // here can block on the GPU, and let it redraw on the next wake.
+        if emptyFor > 0.1 {
+            for other in overlays where !other.view.isClear {
+                other.view.hideStaleContent()
+            }
+        }
+        if overlays.allSatisfy(\.view.isClear) {
             sleep()
             engine.reset()
         }
