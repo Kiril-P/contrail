@@ -48,6 +48,23 @@ struct MenuPopover: View {
                     .controlSize(.small)
             }
 
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Click ripples")
+                    Text("A ring wherever you click")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle("Click ripples", isOn: settings.clickRipples)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .controlSize(.small)
+            }
+            if store.settings.clickRipples {
+                SliderRow(title: "Size", value: settings.clickSize, range: TrailSettings.clickSizeRange, step: 1, format: Formats.points)
+            }
+
             Divider()
 
             HStack {

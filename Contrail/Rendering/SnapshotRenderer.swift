@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Renders a synthetic trail to a PNG without touching the real cursor.
 ///
-///     Contrail.app/Contents/MacOS/Contrail --snapshot out.png [--preset cyan] [--matte] [--width 7] [--opacity 1] [--glow 0.7] [--background light|dark]
+///     Contrail.app/Contents/MacOS/Contrail --snapshot out.png [--preset cyan] [--matte] [--width 7] [--opacity 1] [--glow 0.7] [--taper N] [--speed N] [--ripples] [--click-size N] [--background light|dark]
 ///     Contrail.app/Contents/MacOS/Contrail --snapshot-presets out.png
 ///     Contrail.app/Contents/MacOS/Contrail --snapshot-ui out.png
 ///
@@ -34,6 +34,8 @@ enum SnapshotRenderer {
         let background = args.firstIndex(of: "--background").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
             ?? (settings.highContrast ? "light" : "dark")
         if let taper = number("--taper") { settings.taper = taper }
+        if let size = number("--click-size") { settings.clickSize = size }
+        sampleRipples = args.contains("--ripples")
         let speed = number("--speed")
         let ok = render(settings: settings.clamped(), background: background, speed: speed, to: output)
         exit(ok ? 0 : 1)
@@ -151,14 +153,28 @@ enum SnapshotRenderer {
 
     /// Renders the sample trail at 2×. `background` is "light", "dark", or nil
     /// for a transparent image.
+    /// Set by `--ripples`: also draw three click rings at different ages.
+    private static var sampleRipples = false
+
     static func renderImage(settings: TrailSettings, background: String?, size: CGSize, speed: Double? = nil) -> CGImage? {
         guard let renderer = TrailRenderer.shared else { return nil }
         let scale: CGFloat = 2
         let segments = speed.map { slowTrail(size: size, settings: settings, speed: $0) }
             ?? sampleTrail(size: size, settings: settings)
+        var frame = TrailFrame(segments: segments)
+        if sampleRipples {
+            var system = RippleSystem()
+            let now = 10.0
+            let samples: [(x: Double, age: Double, primary: Bool)] = [(0.25, 0.12, true), (0.5, 0.35, true), (0.75, 0.6, false)]
+            for sample in samples {
+                let center = CGPoint(x: size.width * sample.x, y: size.height * 0.3)
+                system.add(at: center, time: now - sample.age * RippleSystem.duration, color: settings.rippleColor(primary: sample.primary))
+            }
+            frame.ripples = system.instances(now: now, size: settings.clickSize)
+        }
         let uniforms = TrailUniforms(viewSize: size, origin: .zero, scale: scale, settings: settings)
         guard let texture = renderer.renderOffscreen(
-            segments, uniforms: uniforms, width: Int(size.width * scale), height: Int(size.height * scale)
+            frame, uniforms: uniforms, width: Int(size.width * scale), height: Int(size.height * scale)
         ) else { return nil }
 
         let width = texture.width, height = texture.height

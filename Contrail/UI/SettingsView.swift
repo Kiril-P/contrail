@@ -30,6 +30,19 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Clicks") {
+                Toggle(isOn: settings.clickRipples) {
+                    Text("Click ripples")
+                    Text("Show an expanding ring wherever you click. Left clicks use the trail color.")
+                }
+                SliderRow(title: "Size", value: settings.clickSize, range: TrailSettings.clickSizeRange, step: 1, format: Formats.points)
+                    .disabled(!store.settings.clickRipples)
+                LabeledContent("Right click") {
+                    PresetPicker(selection: settings.rightClickPresetID, size: 22, spacing: 8)
+                }
+                .disabled(!store.settings.clickRipples)
+            }
+
             Section("Motion") {
                 SliderRow(title: "Follow", value: settings.followSpeed, range: TrailSettings.unitRange, format: followLabel)
                 SliderRow(title: "Hold", value: settings.linger, range: TrailSettings.lingerRange, format: Formats.seconds)

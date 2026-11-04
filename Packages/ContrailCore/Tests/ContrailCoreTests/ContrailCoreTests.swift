@@ -154,6 +154,52 @@ import Testing
     }
 }
 
+@Suite struct RippleTests {
+    let cyan = TrailColor(hex: 0x28DCFF)
+
+    @Test func ripplesExpandFadeAndExpire() {
+        var system = RippleSystem()
+        system.add(at: CGPoint(x: 10, y: 20), time: 0, color: cyan)
+        let early = system.instances(now: 0.05, size: 56)[0]
+        let late = system.instances(now: 0.4, size: 56)[0]
+        #expect(early.radius < late.radius)
+        #expect(early.alpha > late.alpha)
+        #expect(late.radius <= 28)
+        #expect(early.fill > 0 && late.fill == 0)
+
+        system.prune(now: RippleSystem.duration)
+        #expect(system.isEmpty)
+    }
+
+    @Test func reduceMotionFadesInPlace() {
+        var system = RippleSystem()
+        system.add(at: .zero, time: 0, color: cyan)
+        let a = system.instances(now: 0.05, size: 56, reduceMotion: true)[0]
+        let b = system.instances(now: 0.4, size: 56, reduceMotion: true)[0]
+        #expect(a.radius == 28 && b.radius == 28)
+        #expect(a.alpha > b.alpha)
+    }
+
+    @Test func liveRipplesAreCapped() {
+        var system = RippleSystem()
+        for i in 0..<40 {
+            system.add(at: CGPoint(x: i, y: 0), time: Double(i) * 0.001, color: cyan)
+        }
+        #expect(system.count == RippleSystem.maxCount)
+    }
+
+    @Test func rippleLayoutMatchesShader() {
+        #expect(MemoryLayout<RippleInstance>.stride == 48)
+        #expect(MemoryLayout<RippleInstance>.offset(of: \RippleInstance.color) == 32)
+    }
+
+    @Test func rippleColors() {
+        let s = TrailSettings(presetID: "lime", rightClickPresetID: "amber")
+        #expect(s.rippleColor(primary: true) == ColorPreset.preset(id: "lime")!.stops[0])
+        #expect(s.rippleColor(primary: false) == ColorPreset.preset(id: "amber")!.stops[0])
+    }
+}
+
 @Suite struct SettingsTests {
     @Test func decodesPartialJSONWithDefaults() throws {
         let json = #"{"width": 9, "presetID": "cyan"}"#.data(using: .utf8)!
@@ -169,7 +215,11 @@ import Testing
         s.opacity = -1
         s.length = .nan
         s.presetID = "does-not-exist"
+        s.clickSize = 1000
+        s.rightClickPresetID = "nope"
         let c = s.clamped()
+        #expect(c.clickSize == TrailSettings.clickSizeRange.upperBound)
+        #expect(c.rightClickPresetID == TrailSettings.default.rightClickPresetID)
         #expect(c.width == TrailSettings.widthRange.upperBound)
         #expect(c.opacity == TrailSettings.opacityRange.lowerBound)
         #expect(c.length == TrailSettings.lengthRange.lowerBound)
