@@ -136,6 +136,17 @@ final class TrailController {
         }
         // Presses inside Contrail's own windows (popover, Settings) never
         // count as drags, and clear any press state left from outside.
+        // A release inside Contrail's own windows (press started outside)
+        // still ends the gesture, even while drawing is paused.
+        let ownReleases: NSEvent.EventTypeMask = [.leftMouseUp, .rightMouseUp, .otherMouseUp]
+        if let local = NSEvent.addLocalMonitorForEvents(matching: ownReleases, handler: { [weak self] event in
+            if NSEvent.pressedMouseButtons & ~(1 << event.buttonNumber) == 0 {
+                MainActor.assumeIsolated { self?.release(at: NSEvent.mouseLocation) }
+            }
+            return event
+        }) {
+            monitors.append(local)
+        }
         let ownClicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         if let local = NSEvent.addLocalMonitorForEvents(matching: ownClicks, handler: { [weak self] event in
             MainActor.assumeIsolated { self?.clearPress() }
@@ -236,7 +247,8 @@ final class TrailController {
     /// The last button came up: the held ring ripples out from here.
     private func release(at location: CGPoint) {
         guard ripples.isHolding else { return }
-        ripples.release(at: location, time: CACurrentMediaTime())
+        ripples.release(at: location, time: CACurrentMediaTime(),
+                        reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         wake()
     }
 
@@ -309,9 +321,12 @@ final class TrailController {
             // The held ring rides on the cursor, turning the drag color once
             // the press becomes a drag. If the release happened where the
             // global monitor can't see it (Contrail's own windows), let go here.
+            let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             if ripples.isHolding {
-                if NSEvent.pressedMouseButtons == 0 {
-                    ripples.release(at: cursor, time: now)
+                // Let go when the button is up (also covers releases the
+                // global monitor can't see) or the hold key was released.
+                if NSEvent.pressedMouseButtons == 0 || !holding {
+                    ripples.release(at: cursor, time: now, reduceMotion: reduceMotion)
                 } else {
                     ripples.move(to: cursor, time: now, dragColor: dragging ? settings.dragColor : nil)
                 }
@@ -319,11 +334,7 @@ final class TrailController {
             ripples.prune(now: now)
             frameContent = TrailFrame(
                 segments: TrailGeometry.segments(for: points, settings: settings),
-                ripples: ripples.instances(
-                    now: now,
-                    size: settings.clickSize,
-                    reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-                ),
+                ripples: ripples.instances(now: now, size: settings.clickSize, reduceMotion: reduceMotion),
                 particles: particles.instances(settings: settings)
             )
         }
@@ -341,6 +352,13 @@ final class TrailController {
         )
         view.render(onScreen, origin: frame.origin, settings: settings)
 
+        // A button held still: once its ring has settled the picture stops
+        // changing, so pause drawing and keep that frame on screen. Moving
+        // (drag monitor) or letting go (mouse-up monitors) wakes us again.
+        if engine.isEmpty && particles.isEmpty && ripples.isSettled(now: now) {
+            sleep()
+            return
+        }
         guard engine.isEmpty && ripples.isEmpty && particles.isEmpty else {
             emptySince = nil
             return

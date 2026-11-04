@@ -211,6 +211,30 @@ import Testing
         #expect(system.isEmpty)
     }
 
+    @Test func releaseContinuesFromTheHeldRing() {
+        for reduceMotion in [false, true] {
+            var system = RippleSystem()
+            system.press(at: .zero, time: 0, color: cyan)
+            let held = system.instances(now: 0.3, size: 56, reduceMotion: reduceMotion)[0]
+            system.release(at: nil, time: 0.3, reduceMotion: reduceMotion)
+            let out = system.instances(now: 0.3, size: 56, reduceMotion: reduceMotion)[0]
+            #expect(abs(out.radius - held.radius) < 0.01, "reduceMotion \(reduceMotion)")
+            #expect(abs(out.fill - held.fill) < 0.01)
+        }
+    }
+
+    @Test func aStillHeldRingSettles() {
+        var system = RippleSystem()
+        system.press(at: .zero, time: 0, color: cyan)
+        #expect(!system.isSettled(now: 0.5))
+        #expect(system.isSettled(now: 1.5))
+        let a = system.instances(now: 2.0, size: 56)[0].radius
+        let b = system.instances(now: 2.3, size: 56)[0].radius
+        #expect(a == b)                                  // no breathing once settled
+        system.move(to: CGPoint(x: 10, y: 0), time: 2.5, dragColor: nil)
+        #expect(!system.isSettled(now: 2.6))
+    }
+
     @Test func quickClickLooksLikeARipple() {
         var system = RippleSystem()
         system.press(at: .zero, time: 0, color: cyan)

@@ -95,6 +95,10 @@ final class PreviewTrailView: NSView {
         } else if window.isVisible && window.occlusionState.contains(.visible) {
             engine.reset()
             particles.removeAll()
+            // Restart the acted-out gesture cleanly: a release mark may have
+            // passed while the preview was hidden.
+            ripples.removeAll()
+            previousLoop = ((CACurrentMediaTime() - startTime) * 1.1).truncatingRemainder(dividingBy: 2 * .pi)
             lastStep = nil
             driver.start()
         } else {

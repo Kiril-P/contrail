@@ -51,8 +51,10 @@ public struct RippleSystem: Sendable {
         var color: TrailColor
         /// Growth (fraction of full size) the ripple starts from.
         var fromGrowth: Double
-        /// Show the brief "press" disc (instant clicks only).
-        var pressDisc: Bool
+        /// Fill the ripple starts with; it fades over the first 30%.
+        var fromFill: Double
+        /// Released from a held ring: with Reduce Motion it keeps that size.
+        var fromHeld: Bool
     }
 
     /// The ring under a held button.
@@ -62,7 +64,12 @@ public struct RippleSystem: Sendable {
         var color: TrailColor
         var dragColor: TrailColor?
         var dragStart: Double?
+        /// Last time the ring actually moved; it breathes only while active.
+        var lastMoved: Double
     }
+
+    /// How long a still, held ring keeps breathing before it settles.
+    static let settleDelay = 1.0
 
     private var ripples: [Ripple] = []
     private var held: Held?
@@ -75,20 +82,23 @@ public struct RippleSystem: Sendable {
 
     /// An instant click: a ripple that starts small with a press disc.
     public mutating func add(at center: CGPoint, time: Double, color: TrailColor) {
-        append(Ripple(center: center, start: time, color: color, fromGrowth: 0.2, pressDisc: true))
+        append(Ripple(center: center, start: time, color: color, fromGrowth: 0.2, fromFill: 0.2, fromHeld: false))
     }
 
     /// A button went down: start a held ring. Any ring still held (a second
     /// button) is released first.
     public mutating func press(at center: CGPoint, time: Double, color: TrailColor) {
         if held != nil { release(at: nil, time: time) }
-        held = Held(center: center, start: time, color: color)
+        held = Held(center: center, start: time, color: color, lastMoved: time)
     }
 
     /// Keeps the held ring on the cursor. Pass `dragColor` once the press
     /// has become a drag; the ring shifts to it.
     public mutating func move(to center: CGPoint, time: Double, dragColor: TrailColor?) {
         guard var ring = held else { return }
+        if hypot(center.x - ring.center.x, center.y - ring.center.y) > 0.5 {
+            ring.lastMoved = time
+        }
         ring.center = center
         if let dragColor, ring.dragStart == nil {
             ring.dragColor = dragColor
@@ -99,16 +109,28 @@ public struct RippleSystem: Sendable {
 
     /// The button came up: the held ring ripples out from its current size
     /// and color, at `center` (or where it was).
-    public mutating func release(at center: CGPoint?, time: Double) {
+    public mutating func release(at center: CGPoint?, time: Double, reduceMotion: Bool = false) {
         guard let ring = held else { return }
         held = nil
+        // Start exactly where the held ring is (size including its breath,
+        // color, fill) so the hand-off is seamless.
         append(Ripple(
             center: center ?? ring.center,
             start: time,
             color: Self.color(of: ring, at: time),
-            fromGrowth: Self.growth(of: ring, at: time, reduceMotion: false),
-            pressDisc: false
+            fromGrowth: Self.growth(of: ring, at: time, reduceMotion: reduceMotion)
+                * Self.breath(of: ring, at: time, reduceMotion: reduceMotion),
+            fromFill: Self.fill(of: ring, at: time, reduceMotion: reduceMotion),
+            fromHeld: true
         ))
+    }
+
+    /// True when the only thing showing is a held ring that has opened and
+    /// stopped moving: its frame no longer changes, so drawing can pause
+    /// until the cursor moves or the button comes up.
+    public func isSettled(now: Double) -> Bool {
+        guard let ring = held, ripples.isEmpty else { return false }
+        return now - ring.start > Self.openTime && now - ring.lastMoved > Self.settleDelay
     }
 
     public mutating func removeAll() {
@@ -130,19 +152,20 @@ public struct RippleSystem: Sendable {
             guard t >= 0, t < 1 else { return nil }
             return Self.instance(
                 center: ripple.center, color: ripple.color, progress: t, size: size,
-                fromGrowth: ripple.fromGrowth, pressDisc: ripple.pressDisc, reduceMotion: reduceMotion
+                fromGrowth: ripple.fromGrowth, fromFill: ripple.fromFill,
+                keepSize: reduceMotion && ripple.fromHeld, reduceMotion: reduceMotion
             )
         }
         if let ring = held {
             let age = max(now - ring.start, 0)
-            let breath = reduceMotion ? 1 : 1 + 0.05 * sin(age * 2 * .pi * 1.1)
             let growth = Self.growth(of: ring, at: now, reduceMotion: reduceMotion)
+                * Self.breath(of: ring, at: now, reduceMotion: reduceMotion)
             result.append(RippleInstance(
                 center: SIMD2(Float(ring.center.x), Float(ring.center.y)),
-                radius: Float(size / 2 * growth * breath),
+                radius: Float(size / 2 * growth),
                 width: 2.5,
                 alpha: Float(min(age / 0.05, 1) * 0.95),
-                fill: reduceMotion ? 0 : 0.12,
+                fill: Float(Self.fill(of: ring, at: now, reduceMotion: reduceMotion)),
                 color: Self.color(of: ring, at: now).simd
             ))
         }
@@ -163,6 +186,23 @@ public struct RippleSystem: Sendable {
         return 0.2 + (heldGrowth - 0.2) * easeOut((time - ring.start) / openTime)
     }
 
+    /// A gentle pulse while the ring is moving or freshly pressed, fading to
+    /// steady once it has been still for a while.
+    private static func breath(of ring: Held, at time: Double, reduceMotion: Bool) -> Double {
+        if reduceMotion { return 1 }
+        let still = time - ring.lastMoved
+        let amount = min(max((settleDelay - still) / 0.5, 0), 1)
+        return 1 + 0.05 * amount * sin((time - ring.start) * 2 * .pi * 1.1)
+    }
+
+    /// The tinted disc inside the ring: there while pressing, gone once the
+    /// press becomes a drag so it doesn't sit over what's being dragged.
+    private static func fill(of ring: Held, at time: Double, reduceMotion: Bool) -> Double {
+        if reduceMotion { return 0 }
+        guard let start = ring.dragStart else { return 0.12 }
+        return 0.12 * (1 - min(max((time - start) / colorShiftTime, 0), 1))
+    }
+
     private static func color(of ring: Held, at time: Double) -> TrailColor {
         guard let target = ring.dragColor, let start = ring.dragStart else { return ring.color }
         return ring.color.mixed(with: target, by: Float(min(max((time - start) / colorShiftTime, 0), 1)))
@@ -171,14 +211,14 @@ public struct RippleSystem: Sendable {
     /// A releasing ring's shape at `progress` (0…1) through its life.
     static func instance(
         center: CGPoint, color: TrailColor, progress t: Double, size: Double,
-        fromGrowth: Double = 0.2, pressDisc: Bool = true, reduceMotion: Bool
+        fromGrowth: Double = 0.2, fromFill: Double = 0.2, keepSize: Bool = false, reduceMotion: Bool
     ) -> RippleInstance {
-        let growth = reduceMotion ? 1 : fromGrowth + (1 - fromGrowth) * easeOut(t)
+        let growth = keepSize ? fromGrowth : reduceMotion ? 1 : fromGrowth + (1 - fromGrowth) * easeOut(t)
         let radius = size / 2 * growth
         let width = 2.5 + (1 - 2.5) * t
         let alpha = pow(1 - t, 1.5)
-        // A brief filled disc gives an instant click a "press" feel.
-        let fill = (reduceMotion || !pressDisc) ? 0 : 0.2 * (1 - min(t / 0.3, 1))
+        // The press disc fades out over the first 30%.
+        let fill = reduceMotion ? 0 : fromFill * (1 - min(t / 0.3, 1))
         return RippleInstance(
             center: SIMD2(Float(center.x), Float(center.y)),
             radius: Float(radius),
