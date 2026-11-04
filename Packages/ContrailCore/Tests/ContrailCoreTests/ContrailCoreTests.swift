@@ -237,6 +237,16 @@ import Testing
         #expect(!system.isSettled(now: 2.6))
     }
 
+    @Test func aSlowDragKeepsTheRingAwake() {
+        var system = RippleSystem()
+        system.press(at: .zero, time: 0, color: cyan)
+        // 0.3 pt per frame at 120 Hz for 2 s.
+        for frame in 1...240 {
+            system.move(to: CGPoint(x: Double(frame) * 0.3, y: 0), time: Double(frame) / 120, dragColor: nil)
+        }
+        #expect(!system.isSettled(now: 2.0))
+    }
+
     @Test func quickClickLooksLikeARipple() {
         var system = RippleSystem()
         system.press(at: .zero, time: 0, color: cyan)

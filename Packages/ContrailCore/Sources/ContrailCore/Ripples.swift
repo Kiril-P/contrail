@@ -68,6 +68,8 @@ public struct RippleSystem: Sendable {
         var dragStart: Double?
         /// Last time the ring actually moved; it breathes only while active.
         var lastMoved: Double
+        /// Where it was then, so slow drags (under 0.5 pt a frame) count too.
+        var lastMovedAt: CGPoint
     }
 
     /// How long a still, held ring keeps breathing before it settles.
@@ -91,15 +93,16 @@ public struct RippleSystem: Sendable {
     /// button) is released first.
     public mutating func press(at center: CGPoint, time: Double, color: TrailColor) {
         if held != nil { release(at: nil, time: time) }
-        held = Held(center: center, start: time, color: color, lastMoved: time)
+        held = Held(center: center, start: time, color: color, lastMoved: time, lastMovedAt: center)
     }
 
     /// Keeps the held ring on the cursor. Pass `dragColor` once the press
     /// has become a drag; the ring shifts to it.
     public mutating func move(to center: CGPoint, time: Double, dragColor: TrailColor?) {
         guard var ring = held else { return }
-        if hypot(center.x - ring.center.x, center.y - ring.center.y) > 0.5 {
+        if hypot(center.x - ring.lastMovedAt.x, center.y - ring.lastMovedAt.y) > 0.5 {
             ring.lastMoved = time
+            ring.lastMovedAt = center
         }
         ring.center = center
         if let dragColor, ring.dragStart == nil {

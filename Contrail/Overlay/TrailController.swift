@@ -356,9 +356,9 @@ final class TrailController {
         // A button held still: once its ring has settled the picture stops
         // changing, so pause drawing and keep that frame on screen. Moving
         // (drag monitor) or letting go (mouse-up monitors) wakes us again.
-        // Not with a hold key: letting go of it sends no mouse event, so we
-        // keep drawing to notice it and release the ring.
-        if settings.holdModifier == .none, engine.isEmpty, particles.isEmpty, ripples.isSettled(now: now) {
+        // Letting go of a hold key sends no event; the still ring simply
+        // releases on the next move or mouse-up.
+        if engine.isEmpty && particles.isEmpty && ripples.isSettled(now: now) {
             sleep()
             return
         }
