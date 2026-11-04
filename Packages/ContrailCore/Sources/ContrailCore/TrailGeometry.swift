@@ -117,7 +117,11 @@ public enum TrailGeometry {
         }
 
         if settings.style == .dotted {
-            appendDots(along: path, settings: settings, into: &segments)
+            // Dots go on the straight lines between recorded samples rather
+            // than the spline: a spline segment changes shape when the next
+            // sample arrives, which would nudge dots that are already shown.
+            let polyline = pts.map { PathPoint(point: $0.point, age: $0.age, distance: $0.distance) }
+            appendDots(along: polyline, settings: settings, into: &segments)
         } else {
             for (a, b) in zip(path, path.dropFirst()) {
                 segments.append(TrailSegment(

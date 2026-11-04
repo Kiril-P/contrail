@@ -27,6 +27,10 @@ public struct RippleInstance: Equatable, Sendable {
 public struct RippleSystem: Sendable {
     public static let duration: Double = 0.45
     public static let maxCount = 16
+    /// How far a ring's glow reaches beyond its line, in points. Must cover
+    /// the shader's quad: 2.5 × kRippleWideSigma (6) × the widest line
+    /// (2.5 pt) + 2, rounded up. Used to cull rings per display.
+    public static let glowReach: CGFloat = 40
 
     private struct Ripple: Sendable {
         var center: CGPoint
