@@ -18,7 +18,7 @@ Logic that doesn't need AppKit (trail model, geometry, settings) belongs in `Pac
 - The trail must keep needing **no permissions**, and must use ~0% CPU when the cursor is still. Check Activity Monitor before and after your change.
 - Keep the Swift 6 strict-concurrency build free of warnings.
 - Settings are stored as versioned JSON (`TrailSettings`). New fields need a default so older settings still load.
-- Rendering changes: run `Contrail.app/Contents/MacOS/Contrail --snapshot out.png [--preset cyan] [--matte]` from a Debug build, and attach before/after images to your pull request.
+- Rendering changes: run `Contrail.app/Contents/MacOS/Contrail --snapshot out.png [--preset cyan] [--matte]` and attach before/after images to your pull request.
 - Keep pull requests small and focused, and explain the problem they solve.
 
 By contributing, you agree that your contributions are licensed under the GPL-3.0.
