@@ -24,8 +24,8 @@ enum TrailShader {
     struct Uniforms {
         float2 viewSize;      // points
         float2 origin;        // window origin in global points
-        float glowRadius;     // points
-        float glowIntensity;  // 0...1
+        float width;          // head width, points
+        float glow;           // 0...1
         float opacity;        // 0...1
         float pixel;          // size of one device pixel in points
         float highContrast;   // 0 or 1
@@ -43,10 +43,21 @@ enum TrailShader {
         float4 ru [[flat]];   // r0, r1, u0, u1
     };
 
+    // Glow lobes, as multiples of the head width.
+    constant float kTightSigma = 0.5;
+    constant float kWideSigma = 1.6;
+    // Matte mode: extra core radius, rim width and shadow, in points.
+    constant float kMatteGrow = 0.5;
+    constant float kMatteRim = 1.0;
+    constant float kShadowSigma = 2.0;
+    constant float kShadowOffset = 1.0;
+
     static float extentFor(Segment s, constant Uniforms& u) {
         float r = max(s.r0, s.r1);
-        float outline = u.highContrast > 0.5 ? max(1.5, r * 0.3) + 6.0 : 0.0;
-        return r + max(u.glowRadius * (1.0 - u.highContrast), 0.0) + outline + 2.0;
+        if (u.highContrast > 0.5) {
+            return r + kMatteGrow + kMatteRim + kShadowOffset + 2.5 * kShadowSigma + 1.0;
+        }
+        return r + (u.glow > 0.0 ? 2.5 * kWideSigma * u.width : 0.0) + 2.0;
     }
 
     vertex VertexOut trail_vertex(uint vid [[vertex_id]],
@@ -82,42 +93,86 @@ enum TrailShader {
         return mix(u.stops[index].rgb, u.stops[index + 1].rgb, position - float(index));
     }
 
+    static float luminance(float3 linearRGB) {
+        return dot(linearRGB, float3(0.2126, 0.7152, 0.0722));
+    }
+
+    // Scales a color's linear-light luminance down to at most `target`.
+    static float3 withLuminanceAtMost(float3 srgb, float target) {
+        float3 lin = pow(srgb, 2.2);
+        float y = luminance(lin);
+        if (y <= target) { return srgb; }
+        return pow(lin * (target / y), 1.0 / 2.2);
+    }
+
+    static float3 withLuminance(float3 srgb, float target) {
+        float3 lin = pow(srgb, 2.2);
+        float y = max(luminance(lin), 1e-4);
+        return pow(clamp(lin * (target / y), 0.0, 1.0), 1.0 / 2.2);
+    }
+
+    // Distance from p to the segment, and the position h (0...1) along it.
+    static float2 segmentDistance(float2 p, float2 a, float2 b) {
+        float2 pa = p - a;
+        float2 ba = b - a;
+        float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+        return float2(length(pa - ba * h), h);
+    }
+
     fragment float4 trail_fragment(VertexOut in [[stage_in]],
                                    constant Uniforms& u [[buffer(1)]]) {
-        float2 pa = in.world - in.p0;
-        float2 ba = in.p1 - in.p0;
-        float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
-        float d = length(pa - ba * h);
-        float r = mix(in.ru.x, in.ru.y, h);
-        float t = mix(in.ru.z, in.ru.w, h);
-
-        // Head is fully opaque; the tail eases out to transparent.
-        float fade = u.opacity * pow(1.0 - clamp(t, 0.0, 1.0), 1.4);
+        float2 dh = segmentDistance(in.world, in.p0, in.p1);
+        float d = dh.x;
+        float r = mix(in.ru.x, in.ru.y, dh.y);
+        float age = clamp(mix(in.ru.z, in.ru.w, dh.y), 0.0, 1.0);
         float aa = u.pixel;
-        float3 base = gradientColor(t, u);
+        float3 base = gradientColor(age, u);
 
         if (u.highContrast > 0.5) {
-            // Matte: opaque colored core, dark outline, soft shadow. Readable on white.
-            float outline = max(1.5, r * 0.3);
-            float core = 1.0 - smoothstep(r - aa, r + aa, d);
-            float rim = 1.0 - smoothstep(r + outline - aa, r + outline + aa, d);
-            float shadow = exp(-pow(max(d - r - outline, 0.0) / 3.0, 2.0)) * 0.35 * (1.0 - rim);
-            float3 rimColor = base * 0.18;
-            float3 color = base * core + rimColor * (rim - core);
+            // Matte: an opaque body in a darkened hue, a 1 pt rim in the same
+            // hue, and a soft shadow. Stays readable on white backgrounds.
+            float body = r + kMatteGrow;
+            float fade = u.opacity * (1.0 - smoothstep(0.6, 1.0, age));
+            float3 fill = withLuminanceAtMost(base, 0.238);   // OKLCH L ~0.62
+            float3 rimColor = withLuminance(base, 0.022);     // OKLCH L ~0.28
+            float core = 1.0 - smoothstep(body - aa, body + aa, d);
+            float rim = 1.0 - smoothstep(body + kMatteRim - aa, body + kMatteRim + aa, d);
+            float ds = segmentDistance(in.world + float2(0.0, kShadowOffset), in.p0, in.p1).x;
+            float shadow = exp(-pow(max(ds - body, 0.0) / kShadowSigma, 2.0)) * 0.2 * (1.0 - rim);
+            float3 color = fill * core + rimColor * (rim - core);
             float alpha = max(rim, shadow);
             return float4(color * fade, alpha * fade);
         }
 
-        // Glow: anti-aliased core with a white-hot center, plus a Gaussian halo.
+        // Glow: a saturated tube whose inner 40% runs white-hot near the head,
+        // inside a tight halo plus a wide, faint one.
+        float fade = u.opacity * (1.0 - pow(age, 2.2));
         float core = 1.0 - smoothstep(r - aa, r + aa, d);
-        float sigma = max(u.glowRadius * 0.5, 1e-3);
-        float glow = u.glowRadius > 0.0
-            ? exp(-pow(max(d - r, 0.0) / sigma, 2.0)) * u.glowIntensity
-            : 0.0;
-        float hot = core * pow(clamp(1.0 - d / max(r, 1e-3), 0.0, 1.0), 1.5) * 0.8;
-        float3 color = mix(base, float3(1.0), hot);
-        float alpha = max(core, glow);
-        return float4(color * alpha * fade, alpha * fade);
+        // Keep the hot band at least ~1.5 px wide so it never breaks into dots
+        // where the tail gets thin, and let the tail end in pure color.
+        float hotInner = 0.3 * r;
+        float hotOuter = max(0.7 * r, hotInner + 1.5 * aa);
+        float hot = 0.85 * (1.0 - smoothstep(hotInner, hotOuter, d)) * pow(1.0 - age, 1.5);
+        float3 coreColor = mix(base, float3(1.0), hot);
+
+        float headRadius = max(u.width * 0.5, 1e-3);
+        float scale = mix(1.0, clamp(r / headRadius, 0.0, 1.0), 0.6);
+        float outside = max(d - r, 0.0);
+        float tightSigma = max(kTightSigma * u.width * scale, 0.5);
+        float wideSigma = max(kWideSigma * u.width * scale, 1.0);
+        float halo = 1.1 * u.glow * exp(-pow(outside / tightSigma, 2.0))
+                   + 0.45 * u.glow * exp(-pow(outside / wideSigma, 2.0));
+        // The halo fades more slowly than the core so the tail keeps a glow.
+        // The core is never dimmer than the halo right at its edge; otherwise
+        // overlapping capsules would show bright beads at every joint.
+        float haloFade = pow(max(fade, 0.0), 0.6);
+        float edgeHalo = min(1.55 * u.glow, 1.0) * haloFade;
+        float haloAlpha = (1.0 - core) * min(halo, 1.0) * haloFade;
+        float coreAlpha = core * max(fade, edgeHalo);
+
+        // Premultiplied output.
+        float3 color = coreColor * coreAlpha + base * haloAlpha;
+        return float4(color, coreAlpha + haloAlpha);
     }
     """
 }

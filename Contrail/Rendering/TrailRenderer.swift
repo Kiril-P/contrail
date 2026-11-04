@@ -7,8 +7,8 @@ import simd
 struct TrailUniforms {
     var viewSize: SIMD2<Float>
     var origin: SIMD2<Float>
-    var glowRadius: Float
-    var glowIntensity: Float
+    var width: Float
+    var glow: Float
     var opacity: Float
     var pixel: Float
     var highContrast: Float
@@ -23,8 +23,8 @@ struct TrailUniforms {
     init(viewSize: CGSize, origin: CGPoint, scale: CGFloat, settings: TrailSettings) {
         self.viewSize = SIMD2(Float(viewSize.width), Float(viewSize.height))
         self.origin = SIMD2(Float(origin.x), Float(origin.y))
-        self.glowRadius = Float(settings.glowRadius)
-        self.glowIntensity = Float(settings.glowIntensity)
+        self.width = Float(settings.width)
+        self.glow = Float(settings.glow)
         self.opacity = Float(settings.opacity)
         self.pixel = Float(1 / max(scale, 1))
         self.highContrast = settings.highContrast ? 1 : 0

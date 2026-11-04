@@ -148,7 +148,8 @@ final class TrailController {
 
         guard let overlay = overlays.first(where: { $0.view === view }) else { return }
         let frame = overlay.panel.frame
-        let margin = CGFloat(settings.width + settings.glowRadius + 12)
+        // The wide glow lobe reaches ~4× the width beyond the core.
+        let margin = CGFloat(settings.width * 4.5 + 12)
         let visibleRect = frame.insetBy(dx: -margin, dy: -margin)
         let onScreen = segments.filter { $0.bounds.intersects(visibleRect) }
         view.render(onScreen, origin: frame.origin, settings: settings)
