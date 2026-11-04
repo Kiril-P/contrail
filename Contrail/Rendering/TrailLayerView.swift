@@ -8,9 +8,6 @@ final class TrailLayerView: NSView {
     private var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
     /// True when the last frame drawn was empty, so another clear is unnecessary.
     private(set) var isClear = true
-    /// After `hideStaleContent()`, the number of new frames still to present
-    /// before the layer is shown again.
-    private var framesUntilShown = 0
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -54,19 +51,25 @@ final class TrailLayerView: NSView {
         if segments.isEmpty && isClear { return }
         let scale = metalLayer.contentsScale
         let uniforms = TrailUniforms(viewSize: bounds.size, origin: origin, scale: scale, settings: settings)
-        if renderer.draw(segments, uniforms: uniforms, into: metalLayer) {
-            isClear = segments.isEmpty
-            if metalLayer.isHidden {
-                // Presentation is asynchronous, so the first new frame may not
-                // be on screen yet when this returns. Frames present in order,
-                // so once the second one is submitted the first has replaced
-                // the stale content and showing the layer can't flash it.
-                framesUntilShown -= 1
-                if framesUntilShown <= 0 {
-                    setLayerHidden(false)
-                }
+        guard metalLayer.isHidden else {
+            if renderer.draw(segments, uniforms: uniforms, into: metalLayer) {
+                isClear = segments.isEmpty
             }
+            return
         }
+
+        // Showing a hidden layer: present the fresh frame inside the same Core
+        // Animation transaction that unhides the layer, so the stale content
+        // underneath can never appear, however busy the GPU is.
+        metalLayer.presentsWithTransaction = true
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if renderer.draw(segments, uniforms: uniforms, into: metalLayer, inTransaction: true) {
+            isClear = segments.isEmpty
+            metalLayer.isHidden = false
+        }
+        CATransaction.commit()
+        metalLayer.presentsWithTransaction = false
     }
 
     /// Hides whatever this view last presented without asking the GPU for a
@@ -74,15 +77,10 @@ final class TrailLayerView: NSView {
     /// presenting (standby, mirroring). The next successful draw shows it again.
     func hideStaleContent() {
         guard !isClear else { return }
-        setLayerHidden(true)
-        framesUntilShown = 2
-        isClear = true
-    }
-
-    private func setLayerHidden(_ hidden: Bool) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        metalLayer.isHidden = hidden
+        metalLayer.isHidden = true
         CATransaction.commit()
+        isClear = true
     }
 }

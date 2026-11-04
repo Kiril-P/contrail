@@ -87,14 +87,24 @@ final class TrailRenderer {
     /// Draws `segments` (in global points) into `layer`. An empty array clears
     /// it. Returns false when nothing could be submitted (no drawable), so the
     /// caller can try again next frame.
+    ///
+    /// With `inTransaction`, the frame is presented as part of the current Core
+    /// Animation transaction (the layer must have `presentsWithTransaction`
+    /// set), so other layer changes in that transaction appear with it.
     @discardableResult
-    func draw(_ segments: [TrailSegment], uniforms: TrailUniforms, into layer: CAMetalLayer) -> Bool {
+    func draw(_ segments: [TrailSegment], uniforms: TrailUniforms, into layer: CAMetalLayer, inTransaction: Bool = false) -> Bool {
         guard layer.drawableSize.width > 0, layer.drawableSize.height > 0,
               let drawable = layer.nextDrawable(),
               let commandBuffer = queue.makeCommandBuffer() else { return false }
         encode(segments, uniforms: uniforms, target: drawable.texture, commandBuffer: commandBuffer)
-        commandBuffer.present(drawable)
-        commandBuffer.commit()
+        if inTransaction {
+            commandBuffer.commit()
+            commandBuffer.waitUntilScheduled()
+            drawable.present()
+        } else {
+            commandBuffer.present(drawable)
+            commandBuffer.commit()
+        }
         return true
     }
 

@@ -138,6 +138,17 @@ import Testing
         #expect(head.u0 == 0 && head.r0 == TrailGeometry.radius(age: 0, settings: .default))
     }
 
+    @Test func everyStrokeGetsItsOwnHead() {
+        let points = [
+            TrailPoint(point: CGPoint(x: 0, y: 0), age: 1, startsStroke: true),
+            TrailPoint(point: CGPoint(x: 5, y: 0), age: 0.6, startsStroke: false),
+            TrailPoint(point: CGPoint(x: 900, y: 0), age: 0.4, startsStroke: true),
+            TrailPoint(point: CGPoint(x: 905, y: 0), age: 0, startsStroke: false),
+        ]
+        let dots = TrailGeometry.segments(for: points, settings: .default).filter { $0.p0 == $0.p1 }
+        #expect(dots.map(\.p0) == [SIMD2<Float>(5, 0), SIMD2<Float>(905, 0)])
+    }
+
     @Test func segmentLayoutMatchesShader() {
         #expect(MemoryLayout<TrailSegment>.stride == 32)
     }
