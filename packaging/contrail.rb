@@ -11,7 +11,7 @@ cask "contrail" do
 
   # Contrail updates itself (Sparkle); brew upgrade leaves it alone.
   auto_updates true
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
 
   app "Contrail.app"
 

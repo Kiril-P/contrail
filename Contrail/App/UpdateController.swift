@@ -8,19 +8,26 @@ import Sparkle
 /// update is genuine). Installing is always the user's choice.
 ///
 /// Menu-bar apps have no Dock icon, so a scheduled update alert can easily
-/// end up behind other windows. Contrail uses Sparkle's gentle reminders
-/// instead: a background check shows a banner in the popover, and Sparkle
-/// only puts its own window in front when the user asked or acts on it.
+/// end up behind other windows, or jump in front of everything at login.
+/// Contrail uses Sparkle's gentle reminders instead: a background check only
+/// shows a banner in the popover and a dot on the menu-bar icon, and Sparkle
+/// opens its own window when the user checks or clicks Install.
 @MainActor
 final class UpdateController: NSObject, ObservableObject {
     /// Version string of an update found by a background check, if the user
     /// hasn't looked at it yet.
     @Published private(set) var availableVersion: String?
     @Published var automaticallyChecks: Bool {
-        didSet { controller?.updater.automaticallyChecksForUpdates = automaticallyChecks }
+        didSet {
+            // Only write real changes: writing resets Sparkle's check cycle.
+            guard automaticallyChecks != oldValue else { return }
+            controller?.updater.automaticallyChecksForUpdates = automaticallyChecks
+        }
     }
 
     private var controller: SPUStandardUpdaterController?
+    /// False in development builds, which never start the updater.
+    @Published private(set) var isRunning = false
 
     override init() {
         automaticallyChecks = true
@@ -34,14 +41,13 @@ final class UpdateController: NSObject, ObservableObject {
     /// (and isn't just rendering a snapshot).
     func start() {
         controller?.startUpdater()
-        if let controller {
-            automaticallyChecks = controller.updater.automaticallyChecksForUpdates
-        }
+        isRunning = true
     }
 
     var currentVersion: String { Bundle.main.versionString }
 
     func checkForUpdates() {
+        guard isRunning else { return }
         NSApp.activate(ignoringOtherApps: true)
         controller?.checkForUpdates(nil)
     }
@@ -50,12 +56,14 @@ final class UpdateController: NSObject, ObservableObject {
 extension UpdateController: SPUStandardUserDriverDelegate {
     nonisolated var supportsGentleScheduledUpdateReminders: Bool { true }
 
-    /// Let Sparkle show its window only when the app is already in front
-    /// (for example, the user opened Settings); otherwise show the banner.
+    /// Scheduled checks never show Sparkle's window on their own (for an
+    /// accessory app, "immediate focus" means right after launch, which would
+    /// put the update window in front of everything at login). The banner
+    /// and badge do the reminding.
     nonisolated func standardUserDriverShouldHandleShowingScheduledUpdate(
         _ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool
     ) -> Bool {
-        immediateFocus
+        false
     }
 
     nonisolated func standardUserDriverWillHandleShowingUpdate(

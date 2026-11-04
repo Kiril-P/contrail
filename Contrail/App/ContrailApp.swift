@@ -14,7 +14,7 @@ struct ContrailApp: App {
                 openSettings: appDelegate.showSettings
             )
         } label: {
-            MenuBarLabel(activation: appDelegate.activation)
+            MenuBarLabel(activation: appDelegate.activation, updates: appDelegate.updates)
         }
         .menuBarExtraStyle(.window)
     }
@@ -22,9 +22,10 @@ struct ContrailApp: App {
 
 private struct MenuBarLabel: View {
     @ObservedObject var activation: ActivationController
+    @ObservedObject var updates: UpdateController
 
     var body: some View {
-        Image(nsImage: MenuBarIcon.image(enabled: activation.isOn))
+        Image(nsImage: MenuBarIcon.image(enabled: activation.isOn, badge: updates.availableVersion != nil))
     }
 }
 
@@ -41,7 +42,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = TrailController(store: store, activation: activation)
         controller.start()
         self.controller = controller
+        #if !DEBUG
+        // Development builds share the bundle ID and feed; don't let them
+        // offer (or install) release builds over themselves.
         updates.start()
+        #endif
     }
 
     func showSettings() {

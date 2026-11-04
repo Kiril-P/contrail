@@ -288,12 +288,16 @@ struct GeneralSettings: View {
 
             Section("Updates") {
                 Toggle("Automatically check for updates", isOn: $updates.automaticallyChecks)
+                    .disabled(!updates.isRunning)
                 HStack {
-                    Text("Updates are checked once a day and installed only when you choose.")
+                    Text(updates.isRunning
+                         ? "Updates are checked once a day and installed only when you choose."
+                         : "Development builds don't update themselves.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Check for Updates…", action: updates.checkForUpdates)
+                        .disabled(!updates.isRunning)
                 }
             }
 
