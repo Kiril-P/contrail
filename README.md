@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="128" alt="Contrail icon">
+
 # Contrail
 
 A glowing trail that follows your cursor on macOS. Free and open source.
