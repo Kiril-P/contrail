@@ -183,5 +183,90 @@ enum TrailShader {
         float3 color = coreColor * coreAlpha + base * haloAlpha;
         return float4(color, coreAlpha + haloAlpha) * u.opacity;
     }
+
+    // MARK: Click ripples
+
+    struct Ripple {
+        float2 center;
+        float radius;
+        float width;
+        float alpha;
+        float fill;
+        float2 pad;
+        float4 color;
+    };
+
+    struct RippleOut {
+        float4 position [[position]];
+        float2 world;
+        float2 center [[flat]];
+        float4 shape [[flat]];   // radius, width, alpha, fill
+        float4 color [[flat]];
+    };
+
+    constant float kRippleTightSigma = 2.0;   // × ring width
+    constant float kRippleWideSigma = 6.0;    // × ring width
+    constant float kMatteRingHalfWidth = 1.5;
+
+    vertex RippleOut ripple_vertex(uint vid [[vertex_id]],
+                                   uint iid [[instance_id]],
+                                   const device Ripple* ripples [[buffer(0)]],
+                                   constant Uniforms& u [[buffer(1)]]) {
+        Ripple r = ripples[iid];
+        float reach = u.highContrast > 0.5
+            ? kMatteRingHalfWidth + kMatteRim + kShadowOffset + 2.5 * kShadowSigma
+            : (u.glow > 0.0 ? 2.5 * kRippleWideSigma * r.width : 0.0);
+        float extent = r.radius + r.width + reach + 2.0;
+        float2 corner = float2((vid & 1) ? 1.0 : -1.0, (vid & 2) ? 1.0 : -1.0);
+        float2 world = r.center + corner * extent;
+
+        RippleOut out;
+        out.position = float4((world - u.origin) / u.viewSize * 2.0 - 1.0, 0.0, 1.0);
+        out.world = world;
+        out.center = r.center;
+        out.shape = float4(r.radius, r.width, r.alpha, r.fill);
+        out.color = r.color;
+        return out;
+    }
+
+    fragment float4 ripple_fragment(RippleOut in [[stage_in]],
+                                    constant Uniforms& u [[buffer(1)]]) {
+        float radius = in.shape.x;
+        float width = in.shape.y;
+        float aa = u.pixel;
+        float3 base = in.color.rgb;
+        float dist = length(in.world - in.center);
+        float disc = (1.0 - smoothstep(radius - aa, radius + aa, dist)) * in.shape.w;
+
+        float4 ring;
+        float4 press;
+        if (u.highContrast > 0.5) {
+            // Matte ring: constant 3 pt body, 1 pt rim in the same hue, soft shadow.
+            float3 fill = withLuminanceAtMost(base, 0.238);
+            float3 rimColor = withLuminance(base, 0.022);
+            float d = abs(dist - radius) - kMatteRingHalfWidth;
+            float core = 1.0 - smoothstep(-aa, aa, d);
+            float rim = 1.0 - smoothstep(kMatteRim - aa, kMatteRim + aa, d);
+            float ds = abs(length(in.world + float2(0.0, kShadowOffset) - in.center) - radius) - kMatteRingHalfWidth;
+            float shadow = exp(-pow(max(ds - kMatteRim, 0.0) / kShadowSigma, 2.0)) * 0.2 * (1.0 - rim);
+            ring = float4(fill * core + rimColor * (rim - core), max(rim, shadow));
+            press = float4(fill * disc, disc);
+        } else {
+            // Glow ring: a slightly white-hot line with the trail's two-lobe halo.
+            float d = abs(dist - radius) - width * 0.5;
+            float core = 1.0 - smoothstep(-aa, aa, d);
+            float outside = max(d, 0.0);
+            float tight = max(kRippleTightSigma * width, 0.5);
+            float wide = max(kRippleWideSigma * width, 1.0);
+            float halo = 1.1 * u.glow * exp(-pow(outside / tight, 2.0))
+                       + 0.45 * u.glow * exp(-pow(outside / wide, 2.0));
+            float haloAlpha = (1.0 - core) * min(halo, 1.0);
+            float3 coreColor = mix(base, float3(1.0), 0.35);
+            ring = float4(coreColor * core + base * haloAlpha, core + haloAlpha);
+            press = float4(base * disc, disc);
+        }
+        // Premultiplied; MAX matches how the pipeline blends overlapping shapes.
+        return max(ring, press) * (in.shape.z * u.opacity);
+    }
     """
 }

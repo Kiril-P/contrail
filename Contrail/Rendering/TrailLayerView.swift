@@ -44,16 +44,16 @@ final class TrailLayerView: NSView {
         metalLayer.drawableSize = CGSize(width: bounds.width * scale, height: bounds.height * scale)
     }
 
-    /// Renders segments given in global coordinates whose origin maps to this
+    /// Renders a frame given in global coordinates whose origin maps to this
     /// view's bottom-left corner at `origin`.
-    func render(_ segments: [TrailSegment], origin: CGPoint, settings: TrailSettings) {
+    func render(_ frame: TrailFrame, origin: CGPoint, settings: TrailSettings) {
         guard let renderer = TrailRenderer.shared else { return }
-        if segments.isEmpty && isClear { return }
+        if frame.isEmpty && isClear { return }
         let scale = metalLayer.contentsScale
         let uniforms = TrailUniforms(viewSize: bounds.size, origin: origin, scale: scale, settings: settings)
         guard metalLayer.isHidden else {
-            if renderer.draw(segments, uniforms: uniforms, into: metalLayer) {
-                isClear = segments.isEmpty
+            if renderer.draw(frame, uniforms: uniforms, into: metalLayer) {
+                isClear = frame.isEmpty
             }
             return
         }
@@ -64,8 +64,8 @@ final class TrailLayerView: NSView {
         metalLayer.presentsWithTransaction = true
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        if renderer.draw(segments, uniforms: uniforms, into: metalLayer, inTransaction: true) {
-            isClear = segments.isEmpty
+        if renderer.draw(frame, uniforms: uniforms, into: metalLayer, inTransaction: true) {
+            isClear = frame.isEmpty
             metalLayer.isHidden = false
         }
         CATransaction.commit()

@@ -2,12 +2,12 @@ import AppKit
 import Combine
 import ContrailCore
 
-/// Owns the overlay panels and drives the trail.
+/// Owns the overlay panels and drives the trail and click ripples.
 ///
 /// While the cursor moves, each screen's display link samples the cursor and
-/// redraws. Once the trail has fully faded, every display link is paused and
-/// only lightweight mouse-moved monitors remain, so an idle trail costs ~0 CPU.
-/// No permissions are required: mouse-moved monitoring and
+/// redraws. Once the trail and any ripples have faded, every display link is
+/// paused and only lightweight mouse monitors remain, so an idle trail costs
+/// ~0 CPU. No permissions are required: mouse event monitoring and
 /// `NSEvent.mouseLocation` are not protected by TCC.
 @MainActor
 final class TrailController {
@@ -19,12 +19,13 @@ final class TrailController {
 
     private let store: SettingsStore
     private var engine = TrailEngine()
+    private var ripples = RippleSystem()
     private var overlays: [ScreenOverlay] = []
     private var monitors: [Any] = []
     private var observers: [NSObjectProtocol] = []
     private var cancellables: Set<AnyCancellable> = []
 
-    private var segments: [TrailSegment] = []
+    private var frameContent = TrailFrame.empty
     private var lastUpdate: CFTimeInterval = 0
     private var isActive = false
     /// When the trail last became empty.
@@ -67,7 +68,8 @@ final class TrailController {
         } else {
             sleep()
             engine.reset()
-            segments = []
+            ripples.removeAll()
+            frameContent = .empty
             for overlay in overlays {
                 // Hide rather than draw a clear frame: drawing can block on a
                 // display in standby.
@@ -122,6 +124,22 @@ final class TrailController {
         }) {
             monitors.append(local)
         }
+        // Global only: clicks in Contrail's own popover and Settings window
+        // shouldn't ripple, and global monitors never see this app's events.
+        let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: clicks, handler: { [weak self] event in
+            let primary = event.type == .leftMouseDown && !event.modifierFlags.contains(.control)
+            MainActor.assumeIsolated { self?.click(primary: primary) }
+        }) {
+            monitors.append(global)
+        }
+    }
+
+    private func click(primary: Bool) {
+        let settings = store.settings
+        guard settings.isEnabled, settings.clickRipples else { return }
+        ripples.add(at: NSEvent.mouseLocation, time: CACurrentMediaTime(), color: settings.rippleColor(primary: primary))
+        wake()
     }
 
     /// Starts every display link if the trail is enabled and currently idle.
@@ -149,18 +167,30 @@ final class TrailController {
             lastUpdate = now
             engine.update(cursor: NSEvent.mouseLocation, now: now, settings: settings)
             let points = engine.visiblePoints(length: settings.length)
-            segments = TrailGeometry.segments(for: points, settings: settings)
+            ripples.prune(now: now)
+            frameContent = TrailFrame(
+                segments: TrailGeometry.segments(for: points, settings: settings),
+                ripples: ripples.instances(
+                    now: now,
+                    size: settings.clickSize,
+                    reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                )
+            )
         }
 
         guard let overlay = overlays.first(where: { $0.view === view }) else { return }
         let frame = overlay.panel.frame
-        // The wide glow lobe reaches ~4× the width beyond the core.
-        let margin = CGFloat(settings.width * 4.5 + 12)
-        let visibleRect = frame.insetBy(dx: -margin, dy: -margin)
-        let onScreen = segments.filter { $0.bounds.intersects(visibleRect) }
+        // The trail's wide glow reaches ~4× its width beyond the core; a
+        // ripple's reaches ~40 pt beyond its ring.
+        let trailRect = frame.insetBy(dx: -CGFloat(settings.width * 4.5 + 12), dy: -CGFloat(settings.width * 4.5 + 12))
+        let rippleRect = frame.insetBy(dx: -48, dy: -48)
+        let onScreen = TrailFrame(
+            segments: frameContent.segments.filter { $0.bounds.intersects(trailRect) },
+            ripples: frameContent.ripples.filter { $0.bounds.intersects(rippleRect) }
+        )
         view.render(onScreen, origin: frame.origin, settings: settings)
 
-        guard engine.isEmpty else {
+        guard engine.isEmpty && ripples.isEmpty else {
             emptySince = nil
             return
         }

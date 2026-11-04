@@ -25,12 +25,20 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     public var opacity: Double
     /// Opaque matte stroke with a dark outline, readable on white backgrounds.
     public var highContrast: Bool
+    /// Show an expanding ring wherever the user clicks.
+    public var clickRipples: Bool
+    /// Final ring diameter, in points.
+    public var clickSize: Double
+    /// Preset whose head color is used for right and middle clicks. Left
+    /// clicks use the trail's own color.
+    public var rightClickPresetID: String
 
     public static let widthRange: ClosedRange<Double> = 2...20
     public static let lengthRange: ClosedRange<Double> = 0.15...1.5
     public static let unitRange: ClosedRange<Double> = 0...1
     public static let lingerRange: ClosedRange<Double> = 0...3
     public static let opacityRange: ClosedRange<Double> = 0.2...1
+    public static let clickSizeRange: ClosedRange<Double> = 24...128
 
     public static let `default` = TrailSettings()
 
@@ -44,7 +52,10 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         followSpeed: Double = 0.8,
         linger: Double = 0,
         opacity: Double = 1,
-        highContrast: Bool = false
+        highContrast: Bool = false,
+        clickRipples: Bool = false,
+        clickSize: Double = 56,
+        rightClickPresetID: String = "magenta"
     ) {
         self.version = Self.currentVersion
         self.isEnabled = isEnabled
@@ -57,6 +68,9 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.linger = linger
         self.opacity = opacity
         self.highContrast = highContrast
+        self.clickRipples = clickRipples
+        self.clickSize = clickSize
+        self.rightClickPresetID = rightClickPresetID
     }
 
     /// The same settings with every value forced into its valid range.
@@ -73,6 +87,10 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         if ColorPreset.preset(id: presetID) == nil {
             copy.presetID = ColorPreset.defaultID
         }
+        copy.clickSize = clickSize.clamped(to: Self.clickSizeRange)
+        if ColorPreset.preset(id: rightClickPresetID) == nil {
+            copy.rightClickPresetID = TrailSettings.default.rightClickPresetID
+        }
         return copy
     }
 
@@ -81,9 +99,16 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         ColorPreset.preset(id: presetID) ?? ColorPreset.default
     }
 
+    /// Ring color for a left click (the trail's head color) or any other click.
+    public func rippleColor(primary: Bool) -> TrailColor {
+        if primary { return preset.stops[0] }
+        return (ColorPreset.preset(id: rightClickPresetID) ?? ColorPreset.default).stops[0]
+    }
+
     private enum CodingKeys: String, CodingKey {
         case version, isEnabled, presetID, width, length, glow
         case taper, followSpeed, linger, opacity, highContrast
+        case clickRipples, clickSize, rightClickPresetID
     }
 
     public init(from decoder: Decoder) throws {
@@ -100,6 +125,9 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.linger = (try? c.decodeIfPresent(Double.self, forKey: .linger)) ?? d.linger
         self.opacity = (try? c.decodeIfPresent(Double.self, forKey: .opacity)) ?? d.opacity
         self.highContrast = (try? c.decodeIfPresent(Bool.self, forKey: .highContrast)) ?? d.highContrast
+        self.clickRipples = (try? c.decodeIfPresent(Bool.self, forKey: .clickRipples)) ?? d.clickRipples
+        self.clickSize = (try? c.decodeIfPresent(Double.self, forKey: .clickSize)) ?? d.clickSize
+        self.rightClickPresetID = (try? c.decodeIfPresent(String.self, forKey: .rightClickPresetID)) ?? d.rightClickPresetID
     }
 }
 

@@ -29,8 +29,11 @@ Click the Contrail icon in the menu bar. The popover has everything you need dur
 - **Nine colors**: Cyan, Violet, Magenta, Coral, Amber, Lime, Ice, and the Sunset and Aurora gradients
 - **Width**, **Length** (how many seconds of motion the trail shows) and **Glow**
 - **High contrast**: a solid, outlined trail that stays readable on white documents and web pages
+- **Click ripples**: an expanding ring wherever you click (trail color for left clicks, a second color for right clicks), great for screen recordings
 
 ![High contrast mode on a white background](docs/high-contrast.png)
+
+![Click ripples](docs/click-ripples.png)
 
 **Settings…** (⌘,) adds Taper, Opacity, Follow (how tightly the trail tracks the pointer), Hold (keep the trail in place briefly after the pointer stops), and Open at login. Settings are saved automatically.
 

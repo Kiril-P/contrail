@@ -32,6 +32,9 @@ final class PreviewTrailView: NSView {
 
     private let trailView = TrailLayerView(frame: .zero)
     private var engine = TrailEngine()
+    private var ripples = RippleSystem()
+    private var nextClick: Double = 0
+    private var clickCount = 0
     private var driver: FrameDriver?
     private var startTime = CACurrentMediaTime()
     private var occlusionObserver: NSObjectProtocol?
@@ -109,14 +112,26 @@ final class PreviewTrailView: NSView {
     private func renderStill() {
         guard bounds.width > 0 else { return }
         let segments = SnapshotRenderer.sampleTrail(size: bounds.size, settings: settings)
-        trailView.render(segments, origin: .zero, settings: settings)
+        trailView.render(TrailFrame(segments: segments), origin: .zero, settings: settings)
     }
 
     private func step() {
         guard bounds.width > 0 else { return }
         let now = CACurrentMediaTime()
-        engine.update(cursor: cursorPosition(at: now - startTime), now: now, settings: settings)
+        let cursor = cursorPosition(at: now - startTime)
+        engine.update(cursor: cursor, now: now, settings: settings)
         let segments = TrailGeometry.segments(for: engine.visiblePoints(length: settings.length), settings: settings)
-        trailView.render(segments, origin: .zero, settings: settings)
+
+        // With click ripples on, "click" every 1.4 s, every third one a
+        // right click, so the ring colors and size are visible here too.
+        ripples.prune(now: now)
+        if settings.clickRipples, now >= nextClick {
+            clickCount += 1
+            ripples.add(at: cursor, time: now, color: settings.rippleColor(primary: clickCount % 3 != 0))
+            nextClick = now + 1.4
+        }
+        let size = min(settings.clickSize, Double(bounds.height) * 1.2)
+        let frame = TrailFrame(segments: segments, ripples: ripples.instances(now: now, size: size))
+        trailView.render(frame, origin: .zero, settings: settings)
     }
 }
