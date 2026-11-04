@@ -24,21 +24,27 @@ Requires macOS 13 Ventura or later, on Apple silicon or Intel.
 
 ## Use
 
-Click the Contrail icon in the menu bar. The popover has everything you need during a demo:
+Click the Contrail icon in the menu bar and pick a **Look**: six hand-tuned trails, each shown live.
 
-- **On/off switch**
-- **Live preview**, drawn by the same renderer as the real trail
-- **Nine colors**: Cyan, Violet, Magenta, Coral, Amber, Lime, Ice, and the Sunset and Aurora gradients
-- **Width**, **Length** (how many seconds of motion the trail shows) and **Glow**
+| Look | What it is |
+| --- | --- |
+| Neon | A classic cyan neon tube (the default) |
+| Aurora | A teal-to-violet ribbon |
+| Comet | An amber head shedding dust |
+| Sparkler | A sunset tube throwing sparks |
+| Dots | Violet breadcrumbs that linger |
+| Whisper | A thin, quiet line for recordings |
+
+Choose **S / M / L** to size any Look for your screen or projector, and flip the quick toggles:
+
+- **Click ripples**: an expanding ring wherever you click, great for screen recordings
 - **High contrast**: a solid, outlined trail that stays readable on white documents and web pages
-- **Style**: Neon, Comet, Ribbon, Dotted or Sparks, with a Sparks amount for the two particle styles
-- **Click ripples**: an expanding ring wherever you click (trail color for left clicks, a second color for right clicks), great for screen recordings
 
 ![High contrast mode on a white background](docs/high-contrast.png)
 
 ![Click ripples](docs/click-ripples.png)
 
-**Settings…** (⌘,) adds Taper, Opacity, Follow (how tightly the trail tracks the pointer), Hold (keep the trail in place briefly after the pointer stops), and Open at login. Settings are saved automatically.
+**Settings…** (⌘,) has everything else: color, style (Neon, Comet, Ribbon, Dotted, Sparks), width, length, glow, taper, opacity, sparks, ripple size and colors, follow and hold. Changing any of them turns your trail into a **Custom** look, and **Reset** takes you back to the Look it started from.
 
 ### Turning the trail on and off
 

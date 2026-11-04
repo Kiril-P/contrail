@@ -10,14 +10,20 @@ final class SettingsStore: ObservableObject {
 
     @Published var settings: TrailSettings {
         didSet {
-            let clamped = settings.clamped()
-            if clamped != settings {
-                // Assigning inside didSet doesn't re-run didSet, so save here.
-                settings = clamped
+            // Writing the normalized value re-enters this observer (through
+            // @Published); the flag makes that a no-op so each change saves once.
+            guard !isNormalizing else { return }
+            let normalized = settings.clamped().reconcilingBaseLook()
+            if normalized != settings {
+                isNormalizing = true
+                settings = normalized
+                isNormalizing = false
             }
             if oldValue != settings { save() }
         }
     }
+
+    private var isNormalizing = false
 
     private let defaults: UserDefaults
 
@@ -25,7 +31,7 @@ final class SettingsStore: ObservableObject {
         self.defaults = defaults
         if let data = defaults.data(forKey: Self.key),
            let decoded = try? JSONDecoder().decode(TrailSettings.self, from: data) {
-            settings = decoded.clamped()
+            settings = decoded.clamped().reconcilingBaseLook()
         } else {
             settings = .default
         }
@@ -37,6 +43,7 @@ final class SettingsStore: ObservableObject {
     /// (shortcut, hold key, per-app rules) are kept.
     func resetAppearance() {
         var fresh = TrailSettings.default
+        Look.look(id: Look.defaultID)?.apply(to: &fresh, size: .medium)
         fresh.isEnabled = settings.isEnabled
         fresh.holdModifier = settings.holdModifier
         fresh.appRules = settings.appRules

@@ -70,6 +70,9 @@ public struct TrailSettings: Codable, Equatable, Sendable {
     public var appRules: [AppRule]
     /// Turn the trail off while a game is frontmost.
     public var offInGames: Bool
+    /// The Look these settings were last based on, for "Custom · based on…"
+    /// and Reset. Nil for settings that never came from a Look.
+    public var baseLookID: String?
 
     public static let widthRange: ClosedRange<Double> = 2...20
     public static let lengthRange: ClosedRange<Double> = 0.15...1.5
@@ -98,7 +101,8 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         sparks: Double = 0.45,
         holdModifier: HoldModifier = .none,
         appRules: [AppRule] = [],
-        offInGames: Bool = true
+        offInGames: Bool = true,
+        baseLookID: String? = Look.defaultID
     ) {
         self.version = Self.currentVersion
         self.isEnabled = isEnabled
@@ -119,6 +123,7 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.holdModifier = holdModifier
         self.appRules = appRules
         self.offInGames = offInGames
+        self.baseLookID = baseLookID
     }
 
     /// The same settings with every value forced into its valid range.
@@ -158,7 +163,7 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         case version, isEnabled, presetID, width, length, glow
         case taper, followSpeed, linger, opacity, highContrast
         case clickRipples, clickSize, rightClickPresetID, style, sparks
-        case holdModifier, appRules, offInGames
+        case holdModifier, appRules, offInGames, baseLookID
     }
 
     public init(from decoder: Decoder) throws {
@@ -187,6 +192,10 @@ public struct TrailSettings: Codable, Equatable, Sendable {
         self.appRules = (try? c.decodeIfPresent([Lossy<AppRule>].self, forKey: .appRules))?
             .compactMap(\.value) ?? d.appRules
         self.offInGames = (try? c.decodeIfPresent(Bool.self, forKey: .offInGames)) ?? d.offInGames
+        // Settings saved before Looks existed have no base Look.
+        self.baseLookID = c.contains(.baseLookID)
+            ? (try? c.decodeIfPresent(String.self, forKey: .baseLookID)) ?? nil
+            : nil
     }
 }
 

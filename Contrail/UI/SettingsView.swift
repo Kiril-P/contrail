@@ -30,7 +30,11 @@ struct AppearanceSettings: View {
 
     var body: some View {
         Form {
-            Section("Trail") {
+            Section("Look") {
+                LooksPicker(store: store, columns: 3, livePreview: false)
+            }
+
+            Section {
                 PreviewCard(store: store, height: 96)
                     .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
                 LabeledContent("Color") {
@@ -53,6 +57,12 @@ struct AppearanceSettings: View {
                     Text("High contrast")
                     Text("A solid, outlined trail that stays visible on white and light backgrounds.")
                 }
+            } header: {
+                Text("Customize")
+            } footer: {
+                Text("Changing any of these makes your trail a Custom look.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Clicks") {

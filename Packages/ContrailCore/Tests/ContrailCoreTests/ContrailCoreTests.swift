@@ -498,6 +498,95 @@ import Testing
     }
 }
 
+@Suite struct LookTests {
+    @Test func defaultsAreNeonAtMedium() {
+        #expect(LookSelection(.default) == .look(Look.look(id: "neon")!, .medium))
+    }
+
+    @Test func everyLookRoundTripsAtEverySize() {
+        for look in Look.all {
+            for size in LookSize.allCases {
+                var s = TrailSettings()
+                s.highContrast = true
+                s.clickRipples = true
+                look.apply(to: &s, size: size)
+                #expect(LookSelection(s) == .look(look, size), "\(look.id) \(size)")
+                // Looks leave toggles alone.
+                #expect(s.highContrast && s.clickRipples)
+            }
+        }
+    }
+
+    @Test func lookIDsAreUniqueAndValid() {
+        #expect(Set(Look.all.map(\.id)).count == Look.all.count)
+        for look in Look.all {
+            #expect(ColorPreset.preset(id: look.presetID) != nil)
+            var s = TrailSettings()
+            look.apply(to: &s, size: .large)
+            #expect(s.clamped() == s, "\(look.id) stays in range")
+        }
+    }
+
+    @Test func tweakingMakesItCustomBasedOnTheLook() {
+        var s = TrailSettings()
+        Look.look(id: "aurora")!.apply(to: &s, size: .medium)
+        s.glow = 0.9
+        #expect(LookSelection(s) == .custom(base: Look.look(id: "aurora")))
+        // Putting the value back finds the Look again.
+        s.glow = 0.6
+        #expect(LookSelection(s).look?.id == "aurora")
+    }
+
+    @Test func sparksOnlyMatterForParticleStyles() {
+        var s = TrailSettings()
+        Look.look(id: "neon")!.apply(to: &s, size: .medium)
+        s.sparks = 0.1
+        #expect(LookSelection(s).look?.id == "neon")
+        Look.look(id: "sparkler")!.apply(to: &s, size: .medium)
+        s.sparks = 0.1
+        #expect(LookSelection(s).look == nil)
+    }
+
+    @Test func baseLookFollowsWhateverLookIsMatched() {
+        var s = TrailSettings()
+        Look.look(id: "neon")!.apply(to: &s, size: .medium)
+        // Tweak by hand until the values are exactly Whisper's.
+        let whisper = Look.look(id: "whisper")!
+        s.presetID = whisper.presetID; s.width = whisper.width; s.length = whisper.length
+        s.glow = whisper.glow; s.taper = whisper.taper; s.followSpeed = whisper.followSpeed
+        s.opacity = whisper.opacity
+        s = s.reconcilingBaseLook()
+        #expect(s.baseLookID == "whisper")
+        s.glow = 0.9
+        #expect(LookSelection(s.reconcilingBaseLook()) == .custom(base: whisper))
+    }
+
+    @Test func customKeepsItsSizeForReset() {
+        var s = TrailSettings()
+        let neon = Look.look(id: "neon")!
+        neon.apply(to: &s, size: .large)
+        s.glow = 0.2
+        #expect(s.lookSize == .large)
+        neon.apply(to: &s, size: s.lookSize)
+        #expect(LookSelection(s) == .look(neon, .large))
+    }
+
+    @Test func migratedDefaultsGainTheirBaseLook() throws {
+        let s = try JSONDecoder().decode(TrailSettings.self, from: "{}".data(using: .utf8)!)
+        #expect(s.reconcilingBaseLook().baseLookID == "neon")
+    }
+
+    @Test func oldSettingsDecodeWithoutABaseLook() throws {
+        let json = #"{"width": 12, "presetID": "lime"}"#.data(using: .utf8)!
+        let s = try JSONDecoder().decode(TrailSettings.self, from: json)
+        #expect(s.baseLookID == nil)
+        #expect(LookSelection(s) == .custom(base: nil))
+        // Untouched 0.3 defaults still read as Neon.
+        let defaults = try JSONDecoder().decode(TrailSettings.self, from: "{}".data(using: .utf8)!)
+        #expect(LookSelection(defaults).look?.id == "neon")
+    }
+}
+
 @Suite struct SettingsTests {
     @Test func decodesPartialJSONWithDefaults() throws {
         let json = #"{"width": 9, "presetID": "cyan"}"#.data(using: .utf8)!

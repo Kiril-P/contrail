@@ -1,93 +1,36 @@
 import AppKit
 import ContrailCore
+import KeyboardShortcuts
 import SwiftUI
 
-/// The menu-bar popover: the controls people change during a demo.
-/// Set-once options live in the Settings window.
+/// The menu-bar popover: pick a Look, flip the quick toggles, done.
+/// Everything granular lives in Settings.
 struct MenuPopover: View {
     @ObservedObject var store: SettingsStore
     @ObservedObject var activation: ActivationController
     let openSettings: () -> Void
 
     private var settings: Binding<TrailSettings> { $store.settings }
+    /// Re-read when the popover opens, so a shortcut changed in Settings shows.
+    @State private var shortcut = KeyboardShortcuts.getShortcut(for: .toggleTrail)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Contrail")
-                        .font(.headline)
-                    if let reason = activation.decision.reason {
-                        Text(reason)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-                Toggle("Show trail", isOn: Binding(
-                    get: { activation.isOn },
-                    set: { _ in activation.toggle() }
-                ))
-                .toggleStyle(.switch)
-                .labelsHidden()
-                .accessibilityLabel("Show trail")
-                .help("Toggle with your shortcut (⌃⌥T by default)")
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            header
 
-            PreviewCard(store: store)
+            LooksPicker(store: store, columns: 2, openSettings: openSettings)
 
-            PresetPicker(selection: settings.presetID)
-                .frame(maxWidth: .infinity)
+            Divider()
 
-            Picker("Style", selection: settings.style) {
-                ForEach(TrailStyle.allCases) { style in
-                    Text(style.name).tag(style)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .controlSize(.small)
-
-            VStack(spacing: 8) {
-                SliderRow(title: "Width", value: settings.width, range: TrailSettings.widthRange, step: 1, format: Formats.points)
-                SliderRow(title: "Length", value: settings.length, range: TrailSettings.lengthRange, format: Formats.seconds)
-                SliderRow(title: "Glow", value: settings.glow, range: TrailSettings.unitRange, format: Formats.percent)
-                    .disabled(store.settings.highContrast)
-                if store.settings.style.hasParticles {
-                    SliderRow(title: "Sparks", value: settings.sparks, range: TrailSettings.unitRange, format: Formats.percent)
-                        .disabled(store.settings.highContrast)
-                }
-            }
-
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("High contrast")
-                    Text("Solid trail for light backgrounds")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Toggle("High contrast", isOn: settings.highContrast)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Click ripples")
-                    Text("A ring wherever you click")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Toggle("Click ripples", isOn: settings.clickRipples)
-                    .toggleStyle(.switch)
-                    .labelsHidden()
-                    .controlSize(.small)
-            }
-            if store.settings.clickRipples {
-                SliderRow(title: "Size", value: settings.clickSize, range: TrailSettings.clickSizeRange, step: 1, format: Formats.points)
+            HStack(spacing: 4) {
+                QuickToggle(
+                    title: "Click ripples", systemImage: "dot.circle.and.hand.point.up.left.fill",
+                    help: "Show a ring wherever you click", isOn: settings.clickRipples
+                )
+                QuickToggle(
+                    title: "High contrast", systemImage: "circle.lefthalf.filled",
+                    help: "A solid, outlined trail for light backgrounds", isOn: settings.highContrast
+                )
             }
 
             Divider()
@@ -96,12 +39,44 @@ struct MenuPopover: View {
                 Button("Settings…", action: openSettings)
                     .keyboardShortcut(",")
                 Spacer()
-                Button("Quit Contrail") { NSApp.terminate(nil) }
+                Button("Quit") { NSApp.terminate(nil) }
                     .keyboardShortcut("q")
             }
+            .buttonStyle(.borderless)
         }
         .padding(16)
         .frame(width: 320)
+        .onAppear { shortcut = KeyboardShortcuts.getShortcut(for: .toggleTrail) }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text("Contrail")
+                        .font(.headline)
+                    if let shortcut {
+                        Text(shortcut.description)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .help("Turn the trail on or off from anywhere")
+                    }
+                }
+                if let reason = activation.decision.reason {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+            Toggle("Show trail", isOn: Binding(
+                get: { activation.isOn },
+                set: { _ in activation.toggle() }
+            ))
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .accessibilityLabel("Show trail")
+        }
     }
 }
 
