@@ -340,6 +340,7 @@ final class SettingsWindowController {
     private let store: SettingsStore
     private let updates: UpdateController
     private var window: NSWindow?
+    private var closeObserver: NSObjectProtocol?
 
     init(store: SettingsStore, updates: UpdateController) {
         self.store = store
@@ -357,8 +358,24 @@ final class SettingsWindowController {
             window.center()
             window.setFrameAutosaveName("ContrailSettings")
             self.window = window
+            // Settings is opened rarely; don't keep its views (and live
+            // preview) in memory once it's closed.
+            closeObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification, object: window, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.discardWindow() }
+            }
         }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func discardWindow() {
+        if let closeObserver { NotificationCenter.default.removeObserver(closeObserver) }
+        closeObserver = nil
+        // Let the close finish before tearing the views down.
+        let window = self.window
+        self.window = nil
+        DispatchQueue.main.async { window?.contentViewController = nil }
     }
 }

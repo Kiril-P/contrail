@@ -69,14 +69,20 @@ final class TrailController {
     /// around with no button held. Missing a game beats a false capture.
     private var captureDuringPress = false
 
+    /// Where the cursor is. The benchmark replaces this with a scripted path.
+    var cursorSource: @MainActor () -> CGPoint = { NSEvent.mouseLocation }
+
     init(store: SettingsStore, activation: ActivationController) {
         self.store = store
         self.activation = activation
     }
 
+    /// Off for the benchmark, so the real mouse can't disturb it.
+    var listensToMouse = true
+
     func start() {
         rebuildOverlays()
-        installMonitors()
+        if listensToMouse { installMonitors() }
 
         let center = NotificationCenter.default
         observers.append(center.addObserver(
@@ -135,7 +141,7 @@ final class TrailController {
     private func setEnabled(_ enabled: Bool) {
         if enabled {
             for overlay in overlays { overlay.panel.orderFrontRegardless() }
-            restingCursor = NSEvent.mouseLocation
+            restingCursor = cursorSource()
             // @Published emits before the new value is stored, so pass it on.
             wake(enabled: true)
         } else {
@@ -148,6 +154,7 @@ final class TrailController {
                 // Hide rather than draw a clear frame: drawing can block on a
                 // display in standby.
                 overlay.view.hideStaleContent()
+                overlay.view.releaseDrawables()
                 overlay.panel.orderOut(nil)
             }
         }
@@ -345,7 +352,7 @@ final class TrailController {
         // The cursor may have moved while the trail slept or drained (hold
         // key up, or trail off); a click alone shouldn't start a trail here.
         if engine.isAwaitingStroke {
-            restingCursor = NSEvent.mouseLocation
+            restingCursor = cursorSource()
         }
         wake()
     }
@@ -359,10 +366,15 @@ final class TrailController {
         wake()
     }
 
+    /// Starts drawing as if the mouse had moved (for the benchmark).
+    func wakeForBenchmark() { wake() }
+
     /// Starts every display link if the trail is enabled and currently idle.
     private func wake(enabled: Bool? = nil) {
         guard enabled ?? activation.isOn, !isActive else { return }
         isActive = true
+        releaseWork?.cancel()
+        releaseWork = nil
         emptySince = nil
         for overlay in overlays { overlay.driver.start() }
     }
@@ -372,7 +384,21 @@ final class TrailController {
     private func resetTrail() {
         engine.reset()
         particles.removeAll()
-        restingCursor = NSEvent.mouseLocation
+        restingCursor = cursorSource()
+    }
+
+    /// Nothing is showing: after a short pause (so quick bursts of movement
+    /// don't reallocate), give the screen-sized buffers back.
+    private func scheduleRelease() {
+        releaseWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !self.isActive else { return }
+                for overlay in self.overlays { overlay.view.releaseDrawables() }
+            }
+        }
+        releaseWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.releaseDelay, execute: work)
     }
 
     private func sleep() {
@@ -381,11 +407,21 @@ final class TrailController {
         // for enable/rebuild, which set the resting cursor themselves), so a
         // wake is never a fresh key press on a still cursor.
         wasHolding = true
-        restingCursor = NSEvent.mouseLocation
+        restingCursor = cursorSource()
         for overlay in overlays { overlay.driver.stop() }
     }
 
     // MARK: Frame
+
+    /// Frees the overlays' drawables a little while after drawing stops.
+    private var releaseWork: DispatchWorkItem?
+    private static let releaseDelay = 3.0
+
+    /// Model updates so far, and main-thread time spent updating the model
+    /// and drawing (for the benchmark).
+    private(set) var frameCount = 0
+    private(set) var modelSeconds = 0.0
+    private(set) var drawSeconds = 0.0
 
     private func frame(for view: TrailLayerView) {
         let settings = store.settings
@@ -396,7 +432,9 @@ final class TrailController {
         if now - lastUpdate > 0.001 {
             let dt = now - lastUpdate
             lastUpdate = now
-            let cursor = NSEvent.mouseLocation
+            frameCount += 1
+            defer { modelSeconds += CACurrentMediaTime() - now }
+            let cursor = cursorSource()
             // With a hold key set, record the cursor only while it's down;
             // otherwise let the trail drain away. After a reset (sleep, wake,
             // enable, screen change), don't start a trail until the cursor
@@ -459,7 +497,9 @@ final class TrailController {
             ripples: frameContent.ripples.filter { $0.bounds.intersects(rippleRect) },
             particles: frameContent.particles.filter { $0.bounds.intersects(frame) }
         )
+        let drawStart = CACurrentMediaTime()
         view.render(onScreen, origin: frame.origin, settings: settings)
+        drawSeconds += CACurrentMediaTime() - drawStart
 
         // A button held still: once its ring has settled the picture stops
         // changing, so pause drawing and keep that frame on screen. Moving
@@ -489,6 +529,7 @@ final class TrailController {
         if overlays.allSatisfy(\.view.isClear) {
             sleep()
             resetTrail()
+            scheduleRelease()
         }
     }
 }
