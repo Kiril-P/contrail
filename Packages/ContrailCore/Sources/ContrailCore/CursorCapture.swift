@@ -23,6 +23,9 @@ public struct CursorCapture: Sendable {
     /// Events further apart than this aren't compared: something may have
     /// happened in between that we didn't see.
     static let maxGap = 0.1
+    /// A captured cursor reports exactly the same position; anything more
+    /// than this is real (if slow) movement.
+    static let stillTolerance = 0.01
 
     public private(set) var isCaptured = false
     private var previous: (location: CGPoint, time: Double)?
@@ -37,17 +40,22 @@ public struct CursorCapture: Sendable {
     /// its timestamp. Returns true if `isCaptured` changed.
     public mutating func moved(location: CGPoint, delta: CGVector, time: Double, atScreenEdge: Bool) -> Bool {
         defer { previous = (location, time) }
-        guard let previous, time - previous.time <= Self.maxGap, time >= previous.time else { return false }
+        guard let previous, time - previous.time <= Self.maxGap, time >= previous.time else {
+            // A break in what we've seen: start collecting evidence again.
+            clearEvidence()
+            return false
+        }
         let amount = hypot(delta.dx, delta.dy)
         let moved = hypot(location.x - previous.location.x, location.y - previous.location.y)
         let was = isCaptured
-        if moved >= 1 {
-            // The cursor really moved: whatever this is, it isn't a capture.
+        if moved >= Self.stillTolerance {
+            // The cursor really moved, however slowly: whatever this is, it
+            // isn't a capture.
             stillEvents = 0
             stillTravel = 0
             freeTravel += moved
             if freeTravel >= Self.releaseTravel { isCaptured = false }
-        } else if moved < 0.5, amount >= 1, !atScreenEdge {
+        } else if amount >= 1, !atScreenEdge {
             // Movement reported, cursor didn't budge.
             freeTravel = 0
             stillEvents += 1
@@ -60,6 +68,12 @@ public struct CursorCapture: Sendable {
     /// Forgets the last position, e.g. after movement this didn't see.
     public mutating func forgetPosition() {
         previous = nil
+        clearEvidence()
+    }
+
+    private mutating func clearEvidence() {
+        stillEvents = 0
+        stillTravel = 0
     }
 
     /// Forgets everything, e.g. when another app comes to the front.

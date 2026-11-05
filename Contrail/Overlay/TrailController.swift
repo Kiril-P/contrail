@@ -52,8 +52,11 @@ final class TrailController {
     /// is on, and the user hasn't forced the trail on here (an "Always on"
     /// rule, or the switch or shortcut).
     private var isCaptured: Bool {
-        capture.isCaptured && store.settings.offInGames && !activation.decision.isForcedOn
+        capture.isCaptured && store.settings.offInGames && !activation.decision.isForcedOn && !captureOverridden
     }
+    /// The switch or shortcut turned the trail on: the user wants it here,
+    /// captured mouse or not, until another app comes to the front.
+    private var captureOverridden = false
 
     init(store: SettingsStore, activation: ActivationController) {
         self.store = store
@@ -85,8 +88,15 @@ final class TrailController {
         ) { [weak self] note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             guard app?.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
-            MainActor.assumeIsolated { self?.capture.reset() }
+            MainActor.assumeIsolated {
+                self?.capture.reset()
+                self?.captureOverridden = false
+            }
         })
+        activation.didToggle = { [weak self] in
+            guard let self, self.activation.isOn else { return }
+            self.captureOverridden = true
+        }
 
         activation.$decision
             .map(\.isOn)
@@ -127,7 +137,7 @@ final class TrailController {
         }
         overlays.removeAll()
         screenFrames = NSScreen.screens.map(\.frame)
-        capture.forgetPosition()
+        capture.reset()
         isActive = false
         resetTrail()
 

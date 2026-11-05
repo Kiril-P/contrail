@@ -57,7 +57,11 @@ final class ActivationController: ObservableObject {
         } else {
             recompute(settings: settings)
         }
+        didToggle?()
     }
+
+    /// Called after the switch or shortcut was used.
+    var didToggle: (() -> Void)?
 
     private func activated(_ app: NSRunningApplication?) {
         // Opening Contrail's own popover or Settings shouldn't change anything.

@@ -60,10 +60,10 @@ public struct FrontmostApp: Equatable, Sendable {
         return category.hasPrefix("public.app-category.") && category.hasSuffix("games")
     }
 
-    /// Whether an app looks like a game, from its Info.plist and where it's
-    /// installed. Many games never set a games category, so this also counts
-    /// apps that opt into Game Mode or game controllers. (Not where an app is
-    /// installed: Steam also sells tools like Blender.)
+    /// Whether an app looks like a game, from its Info.plist. Many games never
+    /// set a games category, so this also counts apps that opt into Game Mode
+    /// or game controllers. (Not where an app is installed: Steam also sells
+    /// tools like Blender.)
     public static func looksLikeGame(info: [String: Any]) -> Bool {
         if isGameCategory(info["LSApplicationCategoryType"] as? String) { return true }
         if info["LSSupportsGameMode"] as? Bool == true { return true }

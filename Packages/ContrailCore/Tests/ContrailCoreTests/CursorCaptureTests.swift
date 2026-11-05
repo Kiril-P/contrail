@@ -75,6 +75,32 @@ struct CursorCaptureTests {
         #expect(!capture.isCaptured)
     }
 
+    @Test func evidenceDoesntSurviveABreak() {
+        // Isolated still-cursor events, each followed by a gap or by
+        // movement we didn't see, never add up.
+        var capture = CursorCapture(), t = 0.0
+        var location = CGPoint(x: 500, y: 500)
+        for i in 0..<20 {
+            _ = capture.moved(location: location, delta: .zero, time: t, atScreenEdge: false)
+            t += 0.008
+            _ = capture.moved(location: location, delta: CGVector(dx: 8, dy: 0), time: t, atScreenEdge: false)
+            if i % 2 == 0 { t += 1 } else { capture.forgetPosition() }
+            location.x += 30
+        }
+        #expect(!capture.isCaptured)
+    }
+
+    @Test func slowRealMovementReleases() {
+        var capture = CursorCapture(), t = 0.0
+        feed(&capture, from: CGPoint(x: 500, y: 500), time: &t, count: 30, step: CGVector(dx: 4, dy: 0), follow: stuck)
+        #expect(capture.isCaptured)
+        // Half a point per event, with a larger reported delta.
+        feed(&capture, from: CGPoint(x: 500, y: 500), time: &t, count: 100, step: CGVector(dx: 2, dy: 0)) { p, _ in
+            CGPoint(x: p.x + 0.5, y: p.y)
+        }
+        #expect(!capture.isCaptured)
+    }
+
     @Test func movingFreelyAgainReleases() {
         var capture = CursorCapture(), t = 0.0
         feed(&capture, from: CGPoint(x: 500, y: 500), time: &t, count: 30, step: CGVector(dx: 4, dy: 0), follow: stuck)
