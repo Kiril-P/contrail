@@ -45,7 +45,15 @@ final class TrailController {
     /// Notices a game capturing the mouse; while captured (and "Turn off in
     /// games" is on), nothing is drawn and clicks don't ripple.
     private var capture = CursorCapture()
-    private var isCaptured: Bool { capture.isCaptured && store.settings.offInGames }
+    /// Screen frames, cached: mouse events can arrive hundreds of times a
+    /// second, and `NSScreen.screens` builds new objects on every call.
+    private var screenFrames: [CGRect] = []
+    /// Captured, and that's allowed to turn things off: "Turn off in games"
+    /// is on, and the user hasn't forced the trail on here (an "Always on"
+    /// rule, or the switch or shortcut).
+    private var isCaptured: Bool {
+        capture.isCaptured && store.settings.offInGames && !activation.decision.isForcedOn
+    }
 
     init(store: SettingsStore, activation: ActivationController) {
         self.store = store
@@ -65,12 +73,18 @@ final class TrailController {
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.resetTrail() }
+            MainActor.assumeIsolated {
+                self?.resetTrail()
+                self?.capture.reset()
+            }
         })
-        // A new app in front starts with a free mouse.
+        // Another app in front starts with a free mouse. (Not Contrail's own
+        // popover or Settings: the app underneath may still have it.)
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            guard app?.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
             MainActor.assumeIsolated { self?.capture.reset() }
         })
 
@@ -112,6 +126,8 @@ final class TrailController {
             overlay.panel.orderOut(nil)
         }
         overlays.removeAll()
+        screenFrames = NSScreen.screens.map(\.frame)
+        capture.forgetPosition()
         isActive = false
         resetTrail()
 
@@ -143,8 +159,15 @@ final class TrailController {
             // Global events have no window: this is the screen position.
             let location = event.locationInWindow
             let delta = CGVector(dx: event.deltaX, dy: event.deltaY)
+            let time = event.timestamp
+            // Tablets in absolute mode report deltas unrelated to position.
+            let tablet = event.subtype == .tabletPoint
             MainActor.assumeIsolated {
-                self?.watchCapture(location: location, delta: delta)
+                if tablet {
+                    self?.capture.forgetPosition()
+                } else {
+                    self?.watchCapture(location: location, delta: delta, time: time)
+                }
                 self?.moved(flags: flags)
             }
         }) {
@@ -172,7 +195,12 @@ final class TrailController {
         }
         if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] event in
             let flags = event.modifierFlags
-            MainActor.assumeIsolated { self?.moved(flags: flags) }
+            MainActor.assumeIsolated {
+                // Movement over Contrail's own windows isn't fed to the
+                // capture check; don't compare across it.
+                self?.capture.forgetPosition()
+                self?.moved(flags: flags)
+            }
             return event
         }) {
             monitors.append(local)
@@ -211,19 +239,17 @@ final class TrailController {
         }
     }
 
-    /// Mouse movement wakes the trail, unless a hold key is required and up.
-    /// Mouse events carry the modifier state, so no keyboard monitoring (and
-    /// no permission) is needed.
-    /// Feeds the capture detector; on capture, clears whatever is showing.
-    private func watchCapture(location: CGPoint, delta: CGVector) {
-        let atEdge = NSScreen.screens.contains { screen in
-            let f = screen.frame
-            return f.insetBy(dx: -1, dy: -1).contains(location)
+    /// Feeds the capture detector; when a capture starts (and is allowed to
+    /// turn things off), clears whatever is showing.
+    private func watchCapture(location: CGPoint, delta: CGVector, time: Double) {
+        guard store.settings.offInGames else { return }
+        let atEdge = screenFrames.contains { f in
+            f.insetBy(dx: -1, dy: -1).contains(location)
                 && (location.x <= f.minX + 1 || location.x >= f.maxX - 2
                     || location.y <= f.minY + 1 || location.y >= f.maxY - 2)
         }
-        guard capture.moved(location: location, delta: delta, atScreenEdge: atEdge),
-              capture.isCaptured else { return }
+        guard capture.moved(location: location, delta: delta, time: time, atScreenEdge: atEdge),
+              isCaptured else { return }
         resetTrail()
         ripples.removeAll()
         clearPress()
@@ -231,6 +257,9 @@ final class TrailController {
         wake()
     }
 
+    /// Mouse movement wakes the trail, unless a hold key is required and up.
+    /// Mouse events carry the modifier state, so no keyboard monitoring (and
+    /// no permission) is needed.
     private func moved(flags: NSEvent.ModifierFlags) {
         // A held ring always wakes, so it can follow or be released.
         guard !isCaptured else { return }

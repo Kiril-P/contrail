@@ -82,7 +82,7 @@ final class ActivationController: ObservableObject {
         return FrontmostApp(
             bundleID: app.bundleIdentifier,
             name: app.localizedName ?? app.bundleIdentifier ?? "this app",
-            isGame: FrontmostApp.looksLikeGame(info: info, bundlePath: app.bundleURL?.path)
+            isGame: FrontmostApp.looksLikeGame(info: info)
         )
     }
 }
