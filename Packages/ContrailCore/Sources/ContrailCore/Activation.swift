@@ -45,7 +45,7 @@ public struct AppRule: Codable, Equatable, Identifiable, Sendable {
 public struct FrontmostApp: Equatable, Sendable {
     public var bundleID: String?
     public var name: String
-    /// The app declares itself a game (`LSApplicationCategoryType`).
+    /// The app looks like a game (see `looksLikeGame`).
     public var isGame: Bool
 
     public init(bundleID: String?, name: String, isGame: Bool) {
@@ -58,6 +58,19 @@ public struct FrontmostApp: Equatable, Sendable {
     public static func isGameCategory(_ category: String?) -> Bool {
         guard let category else { return false }
         return category.hasPrefix("public.app-category.") && category.hasSuffix("games")
+    }
+
+    /// Whether an app looks like a game, from its Info.plist. Many games never
+    /// set a games category, so this also counts apps that opt into Game Mode
+    /// or game controllers. (Not where an app is installed: Steam also sells
+    /// tools like Blender.)
+    public static func looksLikeGame(info: [String: Any]) -> Bool {
+        if isGameCategory(info["LSApplicationCategoryType"] as? String) { return true }
+        if info["LSSupportsGameMode"] as? Bool == true { return true }
+        if info["GCSupportsGameMode"] as? Bool == true { return true }   // older key
+        if info["GCSupportsControllerUserInteraction"] as? Bool == true { return true }
+        if info["GCSupportedGameControllers"] != nil { return true }
+        return false
     }
 }
 
@@ -114,6 +127,16 @@ public enum ActivationPolicy {
         public var isOn: Bool
         /// Short explanation when a rule or override decided, e.g. "On in Keynote".
         public var reason: String?
+        /// On because the user explicitly asked for it here (an "Always on"
+        /// rule, or the switch or shortcut overriding a rule). Automatic
+        /// turning off, such as for a captured mouse, doesn't apply.
+        public var isForcedOn = false
+
+        public init(isOn: Bool, reason: String?, isForcedOn: Bool = false) {
+            self.isOn = isOn
+            self.reason = reason
+            self.isForcedOn = isForcedOn
+        }
     }
 
     /// The rule that applies to `app`, if any.
@@ -131,10 +154,11 @@ public enum ActivationPolicy {
     public static func decide(settings: TrailSettings, frontmost: FrontmostApp?, override: Bool?) -> Decision {
         let rule = rule(for: frontmost, settings: settings)
         if let override, let rule {
-            return Decision(isOn: override, reason: override == rule.isOn ? rule.reason : "Overridden until you switch apps")
+            return Decision(isOn: override, reason: override == rule.isOn ? rule.reason : "Overridden until you switch apps",
+                            isForcedOn: override)
         }
         if let rule {
-            return Decision(isOn: rule.isOn, reason: rule.reason)
+            return Decision(isOn: rule.isOn, reason: rule.reason, isForcedOn: rule.isOn)
         }
         return Decision(isOn: settings.isEnabled, reason: nil)
     }

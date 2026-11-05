@@ -57,7 +57,11 @@ final class ActivationController: ObservableObject {
         } else {
             recompute(settings: settings)
         }
+        didToggle?()
     }
+
+    /// Called after the switch or shortcut was used.
+    var didToggle: (() -> Void)?
 
     private func activated(_ app: NSRunningApplication?) {
         // Opening Contrail's own popover or Settings shouldn't change anything.
@@ -78,12 +82,11 @@ final class ActivationController: ObservableObject {
     }
 
     private static func describe(_ app: NSRunningApplication) -> FrontmostApp {
-        let category = app.bundleURL
-            .flatMap { Bundle(url: $0)?.object(forInfoDictionaryKey: "LSApplicationCategoryType") as? String }
+        let info = app.bundleURL.flatMap { Bundle(url: $0)?.infoDictionary } ?? [:]
         return FrontmostApp(
             bundleID: app.bundleIdentifier,
             name: app.localizedName ?? app.bundleIdentifier ?? "this app",
-            isGame: FrontmostApp.isGameCategory(category)
+            isGame: FrontmostApp.looksLikeGame(info: info)
         )
     }
 }
