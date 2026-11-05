@@ -55,6 +55,9 @@ final class TrailLayerView: NSView {
     /// a millisecond or two.
     func releaseDrawables() {
         guard isClear, !isReleased else { return }
+        // Note: a layer set this way has no delegate, so the view no longer
+        // suppresses its implicit animations. Every change to it must be
+        // made with actions disabled, as here and in `render`.
         let fresh = makeBackingLayer()
         fresh.isHidden = true
         CATransaction.begin()
@@ -63,7 +66,6 @@ final class TrailLayerView: NSView {
         CATransaction.commit()
         isReleased = true
         metalLayer.contentsScale = window?.backingScaleFactor ?? metalLayer.contentsScale
-        metalLayer.drawableSize = CGSize(width: 1, height: 1)
     }
 
     /// Renders a frame given in global coordinates whose origin maps to this

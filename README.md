@@ -94,7 +94,7 @@ scripts/make-appcast.sh                    # signed Sparkle appcast for that zip
 | Overlays: one click-through panel per screen, above full-screen apps, visible in screen recordings | `Contrail/Overlay/` |
 | Menu-bar popover, Settings window, live preview | `Contrail/UI/` |
 
-The trail samples `NSEvent.mouseLocation` once per display refresh. When the trail has faded, every display link pauses and only a mouse-moved monitor stays alive, so an idle cursor costs nothing. A few seconds later Contrail also gives back its screen-sized drawing buffers, so it idles at about 25 MB of memory.
+The trail samples `NSEvent.mouseLocation` once per display refresh. When the trail has faded, every display link pauses and only a mouse-moved monitor stays alive, so an idle cursor costs nothing. A few seconds later Contrail also gives back its screen-sized drawing buffers, so it idles at about 25 MB of memory (measured with `--benchmark` on a MacBook Pro).
 
 The Metal shader is compiled at runtime from source, so you don't need Xcode's optional Metal toolchain download.
 

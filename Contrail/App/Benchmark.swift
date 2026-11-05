@@ -67,8 +67,9 @@ enum Benchmark {
                         // Wake again after the buffers were given back.
                         moving = true
                         controller.wakeForBenchmark()
-                        let frames2 = controller.frameCount
+                        let frames2 = controller.frameCount, t2 = CACurrentMediaTime()
                         after(1) {
+                        UserDefaults().removePersistentDomain(forName: suite)
                         moving = false
                         print(String(format: """
                         style            %@
@@ -78,10 +79,11 @@ enum Benchmark {
                         active footprint %.1f MB
                         idle footprint   %.1f MB
                         idle CPU         %.2f%%, %d frames
-                        woken again      %d frames in 1 s, footprint %.1f MB
+                        woken again      %.0f fps, footprint %.1f MB
                         """, store.settings.style.rawValue, launch, cpu / wall * 100, Double(frames) / wall,
                               cpu / Double(max(frames, 1)) * 1000, model, draw, active, idle, idleCPU,
-                              idleFrames, controller.frameCount - frames2, footprintMB()))
+                              idleFrames, Double(controller.frameCount - frames2) / (CACurrentMediaTime() - t2),
+                              footprintMB()))
                         exit(0)
                         }
                     }

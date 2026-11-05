@@ -168,6 +168,8 @@ final class TrailController {
             overlay.panel.orderOut(nil)
         }
         overlays.removeAll()
+        releaseWork?.cancel()
+        releaseWork = nil
         screenFrames = NSScreen.screens.map(\.frame)
         resetCapture()
         isActive = false
