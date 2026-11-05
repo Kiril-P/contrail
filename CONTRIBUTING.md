@@ -23,6 +23,16 @@ Logic that doesn't need AppKit (trail model, geometry, settings) belongs in `Pac
 
 By contributing, you agree that your contributions are licensed under the GPL-3.0.
 
+## Measuring performance
+
+`Contrail --benchmark` draws a scripted trail on the main screen for a few seconds (your real mouse is never moved), then waits for the app to go idle. It prints CPU use per frame and memory while drawing and when idle. Run it on a Release build, and compare before and after any change to the render loop:
+
+```sh
+build/DerivedDataRelease/Build/Products/Release/Contrail.app/Contents/MacOS/Contrail --benchmark [--style sparks]
+```
+
+It uses default settings in a separate defaults domain, so your own settings are untouched.
+
 ## Releasing
 
 1. Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in the Xcode project.

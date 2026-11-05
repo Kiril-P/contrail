@@ -39,6 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         SnapshotRenderer.runIfRequested(store: store)
+        Benchmark.runIfRequested()
+        if CommandLine.arguments.contains("--benchmark") { return }
         let controller = TrailController(store: store, activation: activation)
         controller.start()
         self.controller = controller

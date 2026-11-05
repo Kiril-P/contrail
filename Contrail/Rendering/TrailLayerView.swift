@@ -8,6 +8,8 @@ final class TrailLayerView: NSView {
     private var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
     /// True when the last frame drawn was empty, so another clear is unnecessary.
     private(set) var isClear = true
+    /// True while the screen-sized drawables are given back (see `releaseDrawables`).
+    private var isReleased = false
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -41,7 +43,29 @@ final class TrailLayerView: NSView {
     private func updateDrawableSize() {
         let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
         metalLayer.contentsScale = scale
+        guard !isReleased else { return }
         metalLayer.drawableSize = CGSize(width: bounds.width * scale, height: bounds.height * scale)
+    }
+
+    /// Gives back the screen-sized drawables (three full-screen buffers,
+    /// ~24 MB each on a Retina laptop) while nothing is showing. Shrinking a
+    /// layer's drawables or hiding it isn't enough (the last presented one
+    /// stays alive), so swap in a fresh, empty layer; the old one and its
+    /// buffers go away. The next `render` sizes the new layer up, which costs
+    /// a millisecond or two.
+    func releaseDrawables() {
+        guard isClear, !isReleased else { return }
+        // Note: a layer set this way has no delegate, so the view no longer
+        // suppresses its implicit animations. Every change to it must be
+        // made with actions disabled, as here and in `render`.
+        let fresh = makeBackingLayer()
+        fresh.isHidden = true
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer = fresh
+        CATransaction.commit()
+        isReleased = true
+        metalLayer.contentsScale = window?.backingScaleFactor ?? metalLayer.contentsScale
     }
 
     /// Renders a frame given in global coordinates whose origin maps to this
@@ -49,6 +73,10 @@ final class TrailLayerView: NSView {
     func render(_ frame: TrailFrame, origin: CGPoint, settings: TrailSettings) {
         guard let renderer = TrailRenderer.shared else { return }
         if frame.isEmpty && isClear { return }
+        if isReleased {
+            isReleased = false
+            updateDrawableSize()
+        }
         let scale = metalLayer.contentsScale
         let uniforms = TrailUniforms(viewSize: bounds.size, origin: origin, scale: scale, settings: settings)
         guard metalLayer.isHidden else {
