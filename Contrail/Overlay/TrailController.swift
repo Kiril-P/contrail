@@ -55,8 +55,16 @@ final class TrailController {
         capture.isCaptured && store.settings.offInGames && !activation.decision.isForcedOn && !captureOverridden
     }
     /// The switch or shortcut turned the trail on: the user wants it here,
-    /// captured mouse or not, until another app comes to the front.
+    /// so capture detection is off until another app comes to the front
+    /// (whether or not the mouse was captured at the time).
     private var captureOverridden = false
+    /// The last app other than Contrail in front. Opening and closing the
+    /// popover brings the same app back, which isn't a switch.
+    private var lastExternalApp: pid_t?
+    /// The capture started while a button was held: pointer-lock scrubbing
+    /// in an ordinary app (Blender values, Figma scrubbers). It ends with
+    /// the press.
+    private var captureDuringPress = false
 
     init(store: SettingsStore, activation: ActivationController) {
         self.store = store
@@ -87,12 +95,18 @@ final class TrailController {
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
         ) { [weak self] note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-            guard app?.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+            guard let pid = app?.processIdentifier, pid != ProcessInfo.processInfo.processIdentifier else { return }
             MainActor.assumeIsolated {
-                self?.capture.reset()
-                self?.captureOverridden = false
+                guard let self, pid != self.lastExternalApp else { return }
+                self.lastExternalApp = pid
+                self.capture.reset()
+                self.captureOverridden = false
             }
         })
+        if let front = NSWorkspace.shared.frontmostApplication,
+           front.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            lastExternalApp = front.processIdentifier
+        }
         activation.didToggle = { [weak self] in
             guard let self, self.activation.isOn else { return }
             self.captureOverridden = true
@@ -252,7 +266,10 @@ final class TrailController {
     /// Feeds the capture detector; when a capture starts (and is allowed to
     /// turn things off), clears whatever is showing.
     private func watchCapture(location: CGPoint, delta: CGVector, time: Double) {
-        guard store.settings.offInGames else { return }
+        guard store.settings.offInGames else {
+            if capture.isCaptured { capture.reset() }
+            return
+        }
         let atEdge = screenFrames.contains { f in
             f.insetBy(dx: -1, dy: -1).contains(location)
                 && (location.x <= f.minX + 1 || location.x >= f.maxX - 2
@@ -260,6 +277,7 @@ final class TrailController {
         }
         guard capture.moved(location: location, delta: delta, time: time, atScreenEdge: atEdge),
               isCaptured else { return }
+        captureDuringPress = NSEvent.pressedMouseButtons != 0
         resetTrail()
         ripples.removeAll()
         clearPress()
@@ -321,6 +339,10 @@ final class TrailController {
 
     /// The last button came up: the held ring ripples out from here.
     private func release(at location: CGPoint) {
+        if captureDuringPress {
+            captureDuringPress = false
+            capture.reset()
+        }
         guard ripples.isHolding else { return }
         ripples.release(at: location, time: CACurrentMediaTime(),
                         reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
