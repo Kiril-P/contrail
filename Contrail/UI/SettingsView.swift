@@ -186,7 +186,7 @@ struct ActivationSettings: View {
             Section {
                 Toggle(isOn: settings.offInGames) {
                     Text("Turn off in games")
-                    Text("Apps that declare themselves as games. Add a rule for anything else, such as a video player.")
+                    Text("Automatic: games, Steam titles, and any app that takes over the mouse, like a first-person game. Add a rule for anything else.")
                 }
             }
         }

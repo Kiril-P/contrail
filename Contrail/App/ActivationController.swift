@@ -78,12 +78,11 @@ final class ActivationController: ObservableObject {
     }
 
     private static func describe(_ app: NSRunningApplication) -> FrontmostApp {
-        let category = app.bundleURL
-            .flatMap { Bundle(url: $0)?.object(forInfoDictionaryKey: "LSApplicationCategoryType") as? String }
+        let info = app.bundleURL.flatMap { Bundle(url: $0)?.infoDictionary } ?? [:]
         return FrontmostApp(
             bundleID: app.bundleIdentifier,
             name: app.localizedName ?? app.bundleIdentifier ?? "this app",
-            isGame: FrontmostApp.isGameCategory(category)
+            isGame: FrontmostApp.looksLikeGame(info: info, bundlePath: app.bundleURL?.path)
         )
     }
 }

@@ -45,7 +45,7 @@ public struct AppRule: Codable, Equatable, Identifiable, Sendable {
 public struct FrontmostApp: Equatable, Sendable {
     public var bundleID: String?
     public var name: String
-    /// The app declares itself a game (`LSApplicationCategoryType`).
+    /// The app looks like a game (see `looksLikeGame`).
     public var isGame: Bool
 
     public init(bundleID: String?, name: String, isGame: Bool) {
@@ -58,6 +58,19 @@ public struct FrontmostApp: Equatable, Sendable {
     public static func isGameCategory(_ category: String?) -> Bool {
         guard let category else { return false }
         return category.hasPrefix("public.app-category.") && category.hasSuffix("games")
+    }
+
+    /// Whether an app looks like a game, from its Info.plist and where it's
+    /// installed. Many games never set a games category, so this also counts
+    /// apps that opt into Game Mode or game controllers, and anything Steam
+    /// installed.
+    public static func looksLikeGame(info: [String: Any], bundlePath: String?) -> Bool {
+        if isGameCategory(info["LSApplicationCategoryType"] as? String) { return true }
+        if info["GCSupportsGameMode"] as? Bool == true { return true }
+        if info["GCSupportsControllerUserInteraction"] as? Bool == true { return true }
+        if info["GCSupportedGameControllers"] != nil { return true }
+        if let bundlePath, bundlePath.localizedCaseInsensitiveContains("/steamapps/") { return true }
+        return false
     }
 }
 

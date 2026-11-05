@@ -62,7 +62,7 @@ Choose **S / M / L** to size any Look for your screen or projector, and flip the
 - **Shortcut:** ⌃⌥T turns the trail on or off from anywhere. Change it in **Settings → Activation**.
 - **Hold to show:** only draw while ⌥, ⌃, ⌘ or ⇧ is held, so the trail appears exactly when you want to point at something.
 - **Per-app rules:** keep the trail always on in Keynote, or always off in a video player. A rule wins over the switch. Using the switch or shortcut in that app overrides the rule until you switch apps.
-- **Games:** the trail turns off while an app that declares itself a game is in front.
+- **Games:** the trail and click rings turn off by themselves in games. Contrail recognizes games from their app info (a games category, Game Mode or game-controller support, or a Steam install), and notices any app that takes over the mouse, such as a first-person game. No setup needed.
 
 None of this needs any permission. The shortcut uses the system hot-key API, and the hold key is read from mouse events Contrail already sees.
 

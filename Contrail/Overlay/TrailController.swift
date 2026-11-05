@@ -42,6 +42,10 @@ final class TrailController {
     private var pressIsDrag = false
     /// Whether the hold key (if any) was down on the previous model update.
     private var wasHolding = true
+    /// Notices a game capturing the mouse; while captured (and "Turn off in
+    /// games" is on), nothing is drawn and clicks don't ripple.
+    private var capture = CursorCapture()
+    private var isCaptured: Bool { capture.isCaptured && store.settings.offInGames }
 
     init(store: SettingsStore, activation: ActivationController) {
         self.store = store
@@ -62,6 +66,12 @@ final class TrailController {
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.resetTrail() }
+        })
+        // A new app in front starts with a free mouse.
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.capture.reset() }
         })
 
         activation.$decision
@@ -130,7 +140,13 @@ final class TrailController {
         let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] event in
             let flags = event.modifierFlags
-            MainActor.assumeIsolated { self?.moved(flags: flags) }
+            // Global events have no window: this is the screen position.
+            let location = event.locationInWindow
+            let delta = CGVector(dx: event.deltaX, dy: event.deltaY)
+            MainActor.assumeIsolated {
+                self?.watchCapture(location: location, delta: delta)
+                self?.moved(flags: flags)
+            }
         }) {
             monitors.append(global)
         }
@@ -198,8 +214,26 @@ final class TrailController {
     /// Mouse movement wakes the trail, unless a hold key is required and up.
     /// Mouse events carry the modifier state, so no keyboard monitoring (and
     /// no permission) is needed.
+    /// Feeds the capture detector; on capture, clears whatever is showing.
+    private func watchCapture(location: CGPoint, delta: CGVector) {
+        let atEdge = NSScreen.screens.contains { screen in
+            let f = screen.frame
+            return f.insetBy(dx: -1, dy: -1).contains(location)
+                && (location.x <= f.minX + 1 || location.x >= f.maxX - 2
+                    || location.y <= f.minY + 1 || location.y >= f.maxY - 2)
+        }
+        guard capture.moved(location: location, delta: delta, atScreenEdge: atEdge),
+              capture.isCaptured else { return }
+        resetTrail()
+        ripples.removeAll()
+        clearPress()
+        // Draw one empty frame, then the links pause as usual.
+        wake()
+    }
+
     private func moved(flags: NSEvent.ModifierFlags) {
         // A held ring always wakes, so it can follow or be released.
+        guard !isCaptured else { return }
         guard ripples.isHolding || store.settings.holdModifier.isSatisfied(by: flags) else { return }
         wake()
     }
@@ -235,7 +269,8 @@ final class TrailController {
     /// until the button comes up (see `release(at:)`).
     private func press(at location: CGPoint, primary: Bool, flags: NSEvent.ModifierFlags) {
         let settings = store.settings
-        guard activation.isOn, settings.pressEffects, settings.holdModifier.isSatisfied(by: flags) else { return }
+        guard activation.isOn, settings.pressEffects, !isCaptured,
+              settings.holdModifier.isSatisfied(by: flags) else { return }
         ripples.press(at: location, time: CACurrentMediaTime(), color: settings.rippleColor(primary: primary))
         // The cursor may have moved while the trail slept or drained (hold
         // key up, or trail off); a click alone shouldn't start a trail here.
@@ -296,7 +331,9 @@ final class TrailController {
             // enable, screen change), don't start a trail until the cursor
             // actually moves; a click alone only shows its ripple.
             let dragging = isDragging(cursor: cursor, settings: settings)
-            let holding = settings.holdModifier.isSatisfied(by: NSEvent.modifierFlags)
+            // A captured mouse (first-person game) draws nothing, like a
+            // hold key that's up.
+            let holding = settings.holdModifier.isSatisfied(by: NSEvent.modifierFlags) && !isCaptured
             if holding && !wasHolding {
                 // Pressing the hold key starts a trail only once the cursor
                 // moves, even if the old one is still draining.
